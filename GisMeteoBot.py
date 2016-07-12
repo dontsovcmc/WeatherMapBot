@@ -4,7 +4,8 @@ __author__ = 'doncov.eugene'
 import logging
 import sys
 
-from GisMeteoParser import Map
+from GisMeteoParser import EUROPE, SIBERIA, FAR_EAST, CLOUDS, OSADKI, WIND, TEMPERATURE
+from GisMeteoParser import BetaMap
 
 from telegram.ext import Updater
 from telegram.ext import CommandHandler
@@ -27,7 +28,7 @@ echo_handler = MessageHandler([Filters.text], echo)
 updater.dispatcher.add_handler(echo_handler)
 
 def map_command(bot, update):
-    m = Map('Радар - МО', '647')
+    m = BetaMap(EUROPE, CLOUDS) #Map('Радар - МО', '647')
     m.update()
     t = m.now()
     bot.sendMessage(chat_id=update.message.chat_id, text=t)

@@ -2,12 +2,10 @@
 __author__ = 'doncov.eugene'
 
 from GisMeteoBot import start
-from GisMeteoParser import Map
+from GisMeteoParser import  test
 
 if __name__ == "__main__":
 
-    m = Map('dgasgsdg', '/map/568/')
-    m.update()
-    t = m.now()
+    test()
 
     start()
