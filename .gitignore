@@ -11,6 +11,7 @@ __pycache__/
 
 # Distribution / packaging
 .Python
+win32_env/
 env/
 build/
 develop-eggs/
