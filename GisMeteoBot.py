@@ -23,11 +23,10 @@ MENU, CHOOSE_SITE, CHOOSE_MAP, WATCH_MAP = range(4)
 
 # States are saved in a dict that maps chat_id -> state
 state = dict()
-# Sometimes you need to save data temporarily
+
+# Информация о пользователе:
+# ( user_id, выбранный сайт, выбранная карта )
 context = dict()
-# This dict is used to store the settings value for the chat.
-# Usually, you'd use persistence for this (e.g. sqlite).
-values = dict()
 
 
 osadki_mo = GisMeteoMap(u'МО: Осадки', '569')
@@ -105,7 +104,6 @@ def start(bot, update):
             context[chat_id] = (user_id, site, '')
             update.message.text = site.name
             start(bot, update)
-
 
     elif chat_state == WATCH_MAP and chat_context and chat_context[0] == user_id:
 
