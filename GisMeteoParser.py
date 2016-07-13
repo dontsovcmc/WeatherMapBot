@@ -5,6 +5,8 @@ import httplib
 import bs4
 from datetime import datetime
 
+from core import WeatherMap
+
 class Connection(object):
     def __init__(self, url):
         self.root_url = 'www.gismeteo.ru'
@@ -54,13 +56,16 @@ class GisMeteoPage(Connection):
         return ''
 
 
-class Map(GisMeteoPage):
-    def __init__(self, name, url):
-        GisMeteoPage.__init__(self, '/map/' + url + '/')
-        self.name = name.decode('utf-8')
+class GisMeteoMap(WeatherMap):
+    def __init__(self, name, id):
+        WeatherMap.__init__(self, name, id)
+        self.page = GisMeteoPage('/map/' + id + '/')
 
     def now(self):
-        return self.name + '\n' + GisMeteoPage.now(self)
+        return self.name + '\n' + self.page.now()
+
+    def update(self):
+        return self.page.update()
 
 
 def test():
