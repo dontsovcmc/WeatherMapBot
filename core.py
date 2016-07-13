@@ -3,6 +3,7 @@ __author__ = 'doncov.eugene'
 
 from telegram import KeyboardButton
 
+downloaded_files = {}
 
 class WeatherMap(object):
     def __init__(self, name, id):

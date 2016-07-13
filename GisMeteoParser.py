@@ -7,6 +7,8 @@ from datetime import datetime
 
 from core import WeatherMap
 
+from network import Downloader
+
 class Connection(object):
     def __init__(self, url):
         self.root_url = 'www.gismeteo.ru'
@@ -62,7 +64,19 @@ class GisMeteoMap(WeatherMap):
         self.page = GisMeteoPage('/map/' + id + '/')
 
     def now(self):
-        return self.name + '\n' + self.page.now()
+
+        def latest():
+            n = datetime.now()
+            for f in self.page.frames:
+                if f[0] > n:
+                    return f[0].strftime('%d.%m.%Y %H:%M'), f[1]
+            return n.strftime('%d.%m.%Y %H:%M'), ''
+
+        t, url = latest()
+
+        path = FileStorage.get(url)
+
+        return t, path
 
     def update(self):
         return self.page.update()

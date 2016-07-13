@@ -52,9 +52,10 @@ def start(bot, update):
     chat_state = state.get(chat_id, MENU)
     chat_context = context.get(chat_id, None)
 
-    # Since the handler will also be called on messages, we need to check if
-    # the message is actually a command
-    if chat_state == MENU and text[0] == '/':
+    if chat_state == MENU and text == '/start':
+
+        #with open(r"D:\af_settings.png", "rb") as f:
+        #    bot.sendPhoto(chat_id, f)
 
         state[chat_id] = CHOOSE_SITE
         context[chat_id] = (user_id, '', '')
