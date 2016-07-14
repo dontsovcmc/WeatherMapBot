@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 __author__ = 'doncov.eugene'
 
-from GisMeteoBot import main
+from bot import main
 from GisMeteoParser import test
 
 if __name__ == "__main__":
