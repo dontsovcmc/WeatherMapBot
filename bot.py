@@ -4,15 +4,14 @@ __author__ = 'doncov.eugene'
 import sys
 from logger import log
 
-from core import WeatherSite, WeatherSites, WeatherMap
-from GisMeteoParser import GisMeteoMap
-from PictureMap import PictureMap
 
 from telegram.ext import Updater
 from telegram.ext import CommandHandler, CallbackQueryHandler
 from telegram.ext import MessageHandler, Filters
 
 from telegram import ForceReply, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup
+
+from maps import weather_sites, change_site
 
 #import botan
 
@@ -30,21 +29,6 @@ state = dict()
 # ( user_id, выбранный сайт, выбранная карта )
 context = dict()
 
-
-osadki_mo = GisMeteoMap(u'МО: Осадки', '569')
-radar_mo = GisMeteoMap(u'МО: Радар', '647')
-osadki_russia = GisMeteoMap(u'Ц.Россия: Осадки', '572')
-cloulds_russia = GisMeteoMap(u'Ц.Россия: Облачность', '568')
-temp_russia = GisMeteoMap(u'Ц.Россия: T возд', '570')
-
-change_site = WeatherMap(u'Выбор сайта', '')
-
-meteoinfo_spb = PictureMap(u'СПБ: Радар', 'http://meteoinfo.by/radar/RUSP/RUSP_latest.png')
-meteoinfo_spb_gif = PictureMap(u'СПБ: Радар (анимир)', 'http://meteoinfo.by/radar/RUSP/radar-map.gif')
-
-weather_sites = WeatherSites([
-    WeatherSite('gismeteo_ru', 'gismeteo_ru', [osadki_mo, radar_mo, osadki_russia, cloulds_russia, temp_russia, change_site]),
-    WeatherSite('meteoinfo_by', 'gismeteo_ru', [meteoinfo_spb, meteoinfo_spb_gif])])
 
 
 def start(bot, update):
@@ -146,9 +130,10 @@ def start(bot, update):
 
 def test_handler(bot, update):
 
+    from maps import GisMeteoMap
     chat_id = update.message.chat_id
     try:
-        wmap = cloulds_russia
+        wmap = GisMeteoMap(u'МО: Осадки', '569')
         timestamp, path = wmap.now()
         bot.sendMessage(chat_id, text=wmap.map_info(timestamp))
 
