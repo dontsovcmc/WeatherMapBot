@@ -14,9 +14,9 @@ from telegram.ext import MessageHandler, Filters
 
 from telegram import ForceReply, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup
 
-import botan
+#import botan
 
-BOTAN_KEY = sys.argv[2]
+#BOTAN_KEY = '' #sys.argv[2]
 BOT_KEY = sys.argv[1]
 
 updater = Updater(token=BOT_KEY)
@@ -55,7 +55,7 @@ def start(bot, update):
     chat_context = context.get(chat_id, None)
 
     if chat_state == MENU and text == '/start':
-        botan.track(BOT_KEY, chat_id, 'start')
+        #botan.track(BOT_KEY, chat_id, 'start')
         #with open(r"D:\af_settings.png", "rb") as f:
         #    bot.sendPhoto(chat_id, f)
 
@@ -66,7 +66,7 @@ def start(bot, update):
         bot.sendMessage(chat_id, text="Выберите сайт", reply_markup=reply_markup)
 
     elif chat_state == CHOOSE_SITE and chat_context and chat_context[0] == user_id:
-        botan.track(BOT_KEY, chat_id, 'CHOOSE_SITE')
+        #botan.track(BOT_KEY, chat_id, 'CHOOSE_SITE')
 
         site = weather_sites.get(update.message.text)
         if site:
