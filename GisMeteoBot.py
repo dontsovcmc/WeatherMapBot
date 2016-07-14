@@ -73,7 +73,7 @@ def start(bot, update):
             reply_markup = ReplyKeyboardMarkup(site.keyboard_layout(), one_time_keyboard=True, resize_keyboard=True)
             bot.sendMessage(chat_id, text="Выберите карту", reply_markup=reply_markup)
         else:
-            state[chat_id] = CHOOSE_SITE
+            state[chat_id] = MENU
             context[chat_id] = (user_id, '', '')
             update.message.text = '/start'
             start(bot, update)
