@@ -7,22 +7,9 @@ from datetime import datetime
 from logger import log
 
 class PictureMap(WeatherMap):
-    def __init__(self, name, id):
-        WeatherMap.__init__(self, name, id)
-        self.update_delay_sec = 300
+    def __init__(self, name, info, url, update_delay, region, mtype, legend_id):
+        WeatherMap.__init__(self, name, info, url, update_delay, region, mtype, legend_id)
 
-    def get_map_by_time(self, timestamp):
-        self.last_request = datetime.now()
-
-        if self.update_needed():
-            self.update()
-
-        t = self.last_update
-
-        path = file_storage.get(self.id)
-        return t, path
-
-    def update(self):
-        self.last_update = datetime.now()
-        log.info("PictureMap: update")
-        path = file_storage.get(self.id, force=True)
+    def get_current_map_urls(self):
+        #на каждый запрос будет возвращена карта (
+        return [(datetime.now(), self.url)]

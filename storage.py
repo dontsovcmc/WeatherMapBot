@@ -16,8 +16,8 @@ class FileStorage(object):
             log.info('FileStorage: file here %s' % self.files[url])
             return self.files[url]
 
-        d = Downloader()
-        path = d.download_file(self.work_dir, url)
+        with Downloader() as d:
+            path = d.download_file(self.work_dir, url)
         self.files[url] = path
         log.info('FileStorage: file downloaded to %s' % path)
         return path

@@ -12,6 +12,7 @@ from telegram.ext import MessageHandler, Filters
 from telegram import ForceReply, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup
 
 from maps import weather_sites, change_site
+from db import init as db_init
 
 #import botan
 
@@ -150,5 +151,7 @@ updater.dispatcher.add_handler(CommandHandler('test', test_handler))
 
 
 def main():
+
+    db_init()
     updater.start_polling()
 
