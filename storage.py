@@ -23,3 +23,28 @@ class FileStorage(object):
         return path
 
 file_storage = FileStorage()
+
+import shelve
+
+shelve_name = 'shelve.db'
+
+# States are saved in a dict that maps chat_id -> state
+#state = dict()
+
+# Информация о пользователе:
+# ( user_id, выбранный сайт, выбранная карта )
+#context = dict()
+
+def shelve_get(chat_id, field, default):
+    with shelve.open(shelve_name) as storage:
+        try:
+            answer = storage[str(chat_id) + field]
+            return answer
+        except KeyError:
+            return default
+
+
+def shelve_set(chat_id, field, value):
+    with shelve.open(shelve_name) as storage:
+        storage[str(chat_id) + field] = value
+

@@ -11,8 +11,10 @@ from telegram.ext import MessageHandler, Filters
 
 from telegram import ForceReply, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup
 
-from maps import weather_sites, change_site
-from db import init as db_init
+from core import init as db_init
+from core import CHANGE_SITE
+from core import maps_keyboard_layout, sites_keyboard_layout, get_site_id, get_sql_map_id, get_sql_map
+from maps import get_weather_map
 
 #import botan
 
@@ -23,115 +25,122 @@ updater = Updater(token=BOT_KEY)
 
 MENU, CHOOSE_SITE, CHOOSE_MAP, WATCH_MAP = range(4)
 
-# States are saved in a dict that maps chat_id -> state
-state = dict()
-
-# Информация о пользователе:
-# ( user_id, выбранный сайт, выбранная карта )
-context = dict()
-
+from storage import shelve_get, shelve_set
 
 
 def start(bot, update):
     chat_id = update.message.chat_id
     user_id = update.message.from_user.id
     text = update.message.text
-    chat_state = state.get(chat_id, MENU)
-    chat_context = context.get(chat_id, None)
+    chat_state = shelve_get(chat_id, 'state', MENU)
+
+    chat_user = shelve_get(chat_id, 'user_id', None)
 
     if chat_state == MENU and text == '/start':
         #botan.track(BOT_KEY, chat_id, 'start')
         #with open(r"D:\af_settings.png", "rb") as f:
         #    bot.sendPhoto(chat_id, f)
 
-        state[chat_id] = CHOOSE_SITE
-        context[chat_id] = (user_id, '', '')
+        shelve_set(chat_id, 'state', CHOOSE_SITE)
+        shelve_set(chat_id, 'user_id', user_id)
 
-        reply_markup = ReplyKeyboardMarkup(weather_sites.keyboard_layout(), one_time_keyboard=True, resize_keyboard=True)
+        reply_markup = ReplyKeyboardMarkup(sites_keyboard_layout(KeyboardButton), one_time_keyboard=True, resize_keyboard=True)
         bot.sendMessage(chat_id, text="Выберите сайт", reply_markup=reply_markup)
 
-    elif chat_state == CHOOSE_SITE and chat_context and chat_context[0] == user_id:
+    elif chat_state == CHOOSE_SITE and chat_user and chat_user == user_id:
         #botan.track(BOT_KEY, chat_id, 'CHOOSE_SITE')
 
-        site = weather_sites.get(update.message.text)
-        if site:
-            state[chat_id] = CHOOSE_MAP
-            context[chat_id] = (user_id, site, '')
-            reply_markup = ReplyKeyboardMarkup(site.keyboard_layout(), one_time_keyboard=True, resize_keyboard=True)
+        site_id = get_site_id(update.message.text) # bot_path
+        if site_id:
+            shelve_set(chat_id, 'state', CHOOSE_MAP)
+            shelve_set(chat_id, 'site_id', site_id)
+            reply_markup = ReplyKeyboardMarkup(maps_keyboard_layout(site_id, KeyboardButton), one_time_keyboard=True, resize_keyboard=True)
             bot.sendMessage(chat_id, text="Выберите карту", reply_markup=reply_markup)
         else:
-            state[chat_id] = CHOOSE_SITE
-            context[chat_id] = (user_id, '', '')
+            shelve_set(chat_id, 'state', CHOOSE_SITE)
+            shelve_set(chat_id, 'site_id', '')
+            shelve_set(chat_id, 'map_id', '')
             update.message.text = '/start'
             start(bot, update)
 
-    elif chat_state == CHOOSE_MAP and chat_context and chat_context[0] == user_id:
+    elif chat_state == CHOOSE_MAP and chat_user and chat_user == user_id:
 
-        site = context[chat_id][1]
-        wmap = site.get(update.message.text)
+        if update.message.text == CHANGE_SITE:
 
-        if wmap:
-            if wmap.name == change_site.name:
-
-                state[chat_id] = MENU
-                context[chat_id] = (user_id, '', '')
-                update.message.text = '/start'
-                start(bot, update)
-
-            else:
-                state[chat_id] = WATCH_MAP
-                context[chat_id] = (user_id, site, wmap)
-
-                reply_markup = ReplyKeyboardMarkup([[KeyboardButton(change_site.name), KeyboardButton("Выбор карты"), KeyboardButton("Обновить")]],
-                                                    one_time_keyboard=True, resize_keyboard=True)
-
-                timestamp, path = wmap.now()
-
-                log.info('path %s' % path)
-
-                bot.sendMessage(chat_id, text=wmap.map_info(timestamp), reply_markup=reply_markup)
-
-                if path:
-                    with open(path, 'rb') as image:
-                        bot.sendPhoto(chat_id, image, reply_markup=reply_markup)
-                else:
-                    bot.sendMessage(chat_id, text='<изображение отсутствует>', reply_markup=reply_markup)
-
-        else:
-            state[chat_id] = CHOOSE_SITE
-            context[chat_id] = (user_id, site, '')
-            update.message.text = site.name
+            shelve_set(chat_id, 'state', MENU)
+            shelve_set(chat_id, 'site_id', '')
+            shelve_set(chat_id, 'map_id', '')
+            update.message.text = '/start'
             start(bot, update)
 
-    elif chat_state == WATCH_MAP and chat_context and chat_context[0] == user_id:
+        else:
 
-        if text == change_site.name:
-            state[chat_id] = MENU
+            map_id = get_sql_map_id(update.message.text)
+
+            if map_id:
+                shelve_set(chat_id, 'state', WATCH_MAP)
+                shelve_set(chat_id, 'map_id', map_id)
+
+                reply_markup = ReplyKeyboardMarkup([[KeyboardButton(CHANGE_SITE), KeyboardButton("Выбор карты"), KeyboardButton("Обновить")]],
+                                                    one_time_keyboard=True, resize_keyboard=True)
+                try:
+                    name = get_sql_map(map_id).name
+                    wmap = get_weather_map(name)
+                    timestamp, path = wmap.now()
+
+                    log.info('path %s' % path)
+
+                    bot.sendMessage(chat_id, text=wmap.map_info(timestamp), reply_markup=reply_markup)
+
+                    if path:
+                        with open(path, 'rb') as image:
+                            bot.sendPhoto(chat_id, image, reply_markup=reply_markup)
+                    else:
+                        bot.sendMessage(chat_id, text='<изображение отсутствует>', reply_markup=reply_markup)
+                except Exception, err:
+                    bot.sendMessage(chat_id, text='<internal error>', reply_markup=reply_markup)
+
+            else:
+                shelve_set(chat_id, 'state', CHOOSE_SITE)
+                site_id = shelve_get(chat_id, 'site_id', '')
+                update.message.text = site_id
+                start(bot, update)
+
+
+    elif chat_state == WATCH_MAP and chat_user and chat_user == user_id:
+
+        if text == CHANGE_SITE:
+            shelve_set(chat_id, 'state', MENU)
+            shelve_set(chat_id, 'site_id', '')
+            shelve_set(chat_id, 'map_id', '')
+
             update.message.text = '/start'
             start(bot, update)
 
         elif text == u'Выбор карты':
-            state[chat_id] = CHOOSE_SITE
-            update.message.text = context[chat_id][1].name
+            shelve_set(chat_id, 'state', CHOOSE_SITE)
+            update.message.text = shelve_get(chat_id, 'site_id', '/start')
             start(bot, update)
 
         elif text == u'Обновить':
-            state[chat_id] = CHOOSE_MAP
-            update.message.text = context[chat_id][2].name
+            shelve_set(chat_id, 'state', CHOOSE_MAP)
+            update.message.text = shelve_get(chat_id, 'map_id', '/start')
             start(bot, update)
 
         else: # Update
             update.message.text = '/start'
             start(bot, update)
     else:
-        state[chat_id] = MENU
+        shelve_set(chat_id, 'state', MENU)
+        shelve_set(chat_id, 'site_id', '')
+        shelve_set(chat_id, 'map_id', '')
         bot.sendMessage(chat_id,
                         text="Что-то пошло не так /start")
 
 
 def test_handler(bot, update):
 
-    from maps import GisMeteoMap
+    from maps.GisMeteoParser import GisMeteoMap
     chat_id = update.message.chat_id
     try:
         wmap = GisMeteoMap(u'МО: Осадки', '569')

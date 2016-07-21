@@ -1,22 +1,30 @@
 # -*- coding: utf-8 -*-
 __author__ = 'doncov.eugene'
 
-import httplib
+from datetime import datetime
+
 import bs4
-from datetime import datetime, timedelta
-
-from core import WeatherMap
-from storage import file_storage
-
+from maps.weather_map import WeatherMap
 from network import Downloader
-from logger import log
+
 
 # return f[0].strftime('%d.%m.%Y %H:%M') + '\n' + f[1]
 
 
 class GisMeteoMap(WeatherMap):
     def __init__(self, name, info, url, update_delay, region, mtype, legend_id):
-        WeatherMap.__init__(self, name, info, 'https://www.gismeteo.ru/maps/' + url + '/', update_delay, region, mtype, legend_id)
+        '''
+
+        :param name:
+        :param info:
+        :param url: bot_path
+        :param update_delay:
+        :param region:
+        :param mtype:
+        :param legend_id:
+        :return:
+        '''
+        WeatherMap.__init__(self, name, url, info, 'https://www.gismeteo.ru/maps/' + url + '/', update_delay, region, mtype, legend_id)
 
     def get_current_map_urls(self):
         """

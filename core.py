@@ -1,51 +1,135 @@
 # -*- coding: utf-8 -*-
 __author__ = 'doncov.eugene'
 
-from datetime import datetime
-from storage import file_storage
-from db import add_map_to_storage, map_id
+import os
+from db import DBSession, engine, Map, Site, Storage, Legend, Base
+from maps import weather_maps
+from logging import log
+from sqlalchemy.orm.exc import NoResultFound
 
-class WeatherMap(object):
-    def __init__(self, name, info, url, update_delay, region, mtype, legend_id):
-        '''
-        :param name: имя для кнопок меню
-        :param id: информация о карте
-        :return:
-        '''
-        self.name = name
-        self.info = info
-        self.url = url
-        self.update_delay = update_delay # время обновления карт
-        self.region = region
-        self.mtype = mtype
-        self.legend_id = legend_id
+CHANGE_SITE = u'Выбор сайта'
 
-    def get_current_map_urls(self):
-        pass
+def init():
 
-    def update(self):
-        timestamp_urls = self.get_current_map_urls()
+    def get_sql_site(session, weather_map):
+        url = weather_map.url.split('//')[1].split('/')[0]
+        try:
+            sql_site = session.query(Site).filter(Site.url==url).one()
+        except NoResultFound, err:
+            bot_path = url.replace('.','_')
+            sql_site = Site(url=url,bot_path=bot_path)
+            session.add(sql_site)
+        return sql_site
 
-        for m in timestamp_urls: # (timestamp, url)
-            path = file_storage.get(m[1], force=False)
+    def get_sql_legend(session, weather_map):
+        try:
+            sql_legend = session.query(Legend).filter(Legend.info==weather_map.legend).one()
+        except NoResultFound, err:
+            sql_legend = Legend(info=weather_map.legend)
+            session.add(sql_legend)
+        return sql_legend
 
-            add_map_to_storage(map_id(self.name),
-                               m[1],
-                               path,
-                               m[0],
-                               datetime.utcnow())
+    def add_new_map(session, m):
+
+        sql_site = get_sql_site(session, m)
+        sql_legend = get_sql_legend(session, m)
+
+        new_map = Map(name=m.name,
+                      bot_path=m.bot_path,
+                      info=m.info, url=m.url,
+                      update_delay=m.update_delay, region=m.region,
+                      mtype=m.mtype,
+                      legend_id=sql_legend.id,
+                      site_id=sql_site.id)
+        session.add(new_map)
 
 
-    def now(self):
-        return self.get_map_by_time(datetime.now())
+    if not os.path.isfile('weather_map.db'):
+        Base.metadata.create_all(engine)
 
-    def get_map_by_time(self, timestamp):
-        pass
+        #create
+        with DBSession() as session:
 
-    def map_info(self, timestamp):
-        '''
-        Текст над картой в сообщении
-        :param timestamp: время карты
-        :return: текст
-        '''
-        return '%s\n%s' % (self.name, timestamp.strftime('%d.%m.%Y %H:%M'))
+            try:
+                for m in weather_maps:
+                    add_new_map(session, m)
+
+            except Exception, err:
+                log.error(err)
+
+    else:
+        #update
+        with DBSession() as session:
+            for m in weather_maps:
+                try:
+                    map = session.query(Map).filter(Map.name == m.name).one()
+
+                    sql_site = get_sql_site(session, m)
+                    sql_legend = get_sql_legend(session, m)
+
+                    map.bot_path = m.bot_path
+                    map.info = m.info
+                    map.url = m.url
+                    map.update_delay = m.update_delay
+                    map.region = m.region
+                    map.mtype = m.mtype
+                    map.legend_id = sql_legend.id
+                    map.site_id = sql_site.id
+
+                except NoResultFound, err:
+                    add_new_map(session, m)
+
+                except Exception, err:
+                    log.error(err)
+
+
+def add_map_to_storage(map_id, url, path, timestamp, download_time):
+    with DBSession() as session:
+        new_file = Storage(url=url, path=path, timestamp=timestamp,
+                          download_time=download_time,
+                          map_id=map_id)
+        session.add(new_file)
+
+
+def sites_keyboard_layout(kb):
+    '''
+    :param kb:
+    :return:
+    '''
+    sites = []
+    with DBSession() as session:
+        for s in session.query(Site).all():
+            sites.append(s.bot_path)
+
+    def add_kb(sites):
+        return [kb(s) for s in sites]
+
+    return [add_kb(sites[x:x+3]) for x in xrange(0, len(sites), 3)]
+
+
+def get_site_id(bot_path):
+    with DBSession() as session:
+        site = session.query(Site).filter(Site.bot_path == bot_path).one()
+        return site.id
+
+
+def get_sql_map_id(name):
+    with DBSession() as session:
+        map = session.query(Map).filter(Map.name == name).one()
+        return map.id
+
+def get_sql_map(map_id):
+    with DBSession() as session:
+        return session.query(Map).get(map_id)
+
+def maps_keyboard_layout(site_id, kb):
+    maps = []
+    with DBSession() as session:
+        for m in session.query(Map).filter(Map.site_id == site_id).all():
+            maps.append(m.name)
+    maps.append(CHANGE_SITE)
+
+    def add_kb(maps):
+        return [kb(m) for m in maps]
+    return [add_kb(maps[x:x+3]) for x in xrange(0, len(maps), 3)]
+
