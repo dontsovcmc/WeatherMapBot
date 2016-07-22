@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 __author__ = 'doncov.eugene'
 
 import tempfile
@@ -36,15 +37,18 @@ shelve_name = 'shelve.db'
 #context = dict()
 
 def shelve_get(chat_id, field, default):
-    with shelve.open(shelve_name) as storage:
-        try:
-            answer = storage[str(chat_id) + field]
-            return answer
-        except KeyError:
-            return default
+    storage = shelve.open(shelve_name)
+    try:
+        answer = storage[str(chat_id) + field]
+        storage.close()
+        return answer
+    except KeyError:
+        storage.close()
+        return default
 
 
 def shelve_set(chat_id, field, value):
-    with shelve.open(shelve_name) as storage:
-        storage[str(chat_id) + field] = value
+    storage = shelve.open(shelve_name)
+    storage[str(chat_id) + field] = value
+    storage.close()
 

@@ -2,12 +2,20 @@
 __author__ = 'doncov.eugene'
 
 import os
+import bs4
+
+from network import Downloader
 from db import DBSession, engine, Map, Site, Storage, Legend, Base
 from maps import weather_maps
-from logging import log
+from maps import GISMETEO_MAP, PICTURE_MAP, LINK_MAP
+from logger import log
 from sqlalchemy.orm.exc import NoResultFound
+from datetime import datetime
+from storage import file_storage
 
 CHANGE_SITE = u'Выбор сайта'
+CHANGE_MAP = u'Выбор карты'
+REFRESH = u'Обновить'
 
 def init():
 
@@ -35,6 +43,7 @@ def init():
         sql_legend = get_sql_legend(session, m)
 
         new_map = Map(name=m.name,
+                      map_type=m.map_type,
                       bot_path=m.bot_path,
                       info=m.info, url=m.url,
                       update_delay=m.update_delay, region=m.region,
@@ -67,6 +76,7 @@ def init():
                     sql_site = get_sql_site(session, m)
                     sql_legend = get_sql_legend(session, m)
 
+                    map.map_type = m.map_type
                     map.bot_path = m.bot_path
                     map.info = m.info
                     map.url = m.url
@@ -118,9 +128,11 @@ def get_sql_map_id(name):
         map = session.query(Map).filter(Map.name == name).one()
         return map.id
 
+
 def get_sql_map(map_id):
     with DBSession() as session:
         return session.query(Map).get(map_id)
+
 
 def maps_keyboard_layout(site_id, kb):
     maps = []
@@ -133,3 +145,65 @@ def maps_keyboard_layout(site_id, kb):
         return [kb(m) for m in maps]
     return [add_kb(maps[x:x+3]) for x in xrange(0, len(maps), 3)]
 
+
+def get_map_by_id(map_id):
+    with DBSession() as session:
+        return session.query(Map).get(map_id)
+
+def get_now_map(map_id):
+
+    map = get_map_by_id(map_id)
+
+    timestamp_urls = get_map_by_time(map, datetime.now())
+
+    for m in timestamp_urls: # (timestamp, url)
+        path = file_storage.get(m[1], force=False)
+
+        add_map_to_storage(map.id,
+                           m[1],
+                           path,
+                           m[0],
+                           datetime.utcnow())
+
+
+def get_map_by_time(map, timestamp):
+
+    if map.map_type == GISMETEO_MAP:
+        pass
+    elif map.map_type == PICTURE_MAP:
+        pass
+
+def current_map_urls(map):
+    """
+    [(timestamp, url)]
+    :return:
+    """
+    frames = []
+    if map.map_type == GISMETEO_MAP:
+
+        with Downloader() as d:
+            data = d.getresponse(map.url)
+            soup = bs4.BeautifulSoup(data, "html.parser")
+
+        tab_i = 0
+        try:
+            while True:
+                imgs = soup.select('.tab%s > img' % tab_i)
+                if not imgs:
+                    return
+                for i in imgs:
+                    date_object = datetime.strptime(i.attrs['alt'], '%d.%m.%Y %H:%M')
+                    frame = date_object, 'https:' + i.attrs['title']
+                    frames.append(frame)
+                tab_i += 1
+        except Exception, err:
+            pass
+
+    elif map.map_type == PICTURE_MAP:
+
+        return [(datetime.now(), map.url)]
+
+    return frames
+
+def get_map_info(map, timestamp):
+    return '%s\n%s' % (map.name, timestamp.strftime('%d.%m.%Y %H:%M'))

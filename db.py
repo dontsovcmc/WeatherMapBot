@@ -39,6 +39,7 @@ class Map(Base):
     __tablename__ = 'map'
 
     id = Column(Integer, primary_key=True)
+    map_type = Column(Integer, nullable=False)
     name = Column(String(50), nullable=False)
     bot_path = Column(String(50), nullable=False)
     info = Column(String(100))
