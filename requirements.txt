@@ -1,0 +1,3 @@
+beautifulsoup4
+SQLAlchemy
+python-telegram-bot

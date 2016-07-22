@@ -10,7 +10,7 @@ from maps import weather_maps
 from maps import GISMETEO_MAP, PICTURE_MAP, LINK_MAP
 from logger import log
 from sqlalchemy.orm.exc import NoResultFound
-from datetime import datetime
+from datetime import datetime, timedelta
 from storage import file_storage
 
 CHANGE_SITE = u'Выбор сайта'
@@ -93,14 +93,6 @@ def init():
                     log.error(err)
 
 
-def add_map_to_storage(map_id, url, path, timestamp, download_time):
-    with DBSession() as session:
-        new_file = Storage(url=url, path=path, timestamp=timestamp,
-                          download_time=download_time,
-                          map_id=map_id)
-        session.add(new_file)
-
-
 def sites_keyboard_layout(kb):
     '''
     :param kb:
@@ -128,12 +120,6 @@ def get_sql_map_id(name):
         map = session.query(Map).filter(Map.name == name).one()
         return map.id
 
-
-def get_sql_map(map_id):
-    with DBSession() as session:
-        return session.query(Map).get(map_id)
-
-
 def maps_keyboard_layout(site_id, kb):
     maps = []
     with DBSession() as session:
@@ -146,51 +132,79 @@ def maps_keyboard_layout(site_id, kb):
     return [add_kb(maps[x:x+3]) for x in xrange(0, len(maps), 3)]
 
 
-def get_map_by_id(map_id):
+def get_map(map_id, timestamp):
+
     with DBSession() as session:
-        return session.query(Map).get(map_id)
+        sql_map = session.query(Map).get(map_id)
 
-def get_now_map(map_id):
+        try:
+            #Есть карта в хранилище за время Х ?
 
-    map = get_map_by_id(map_id)
+            mint = timestamp - timedelta(seconds=sql_map.update_delay/2)
+            maxt = timestamp + timedelta(seconds=sql_map.update_delay/2)
 
-    timestamp_urls = get_map_by_time(map, datetime.now())
+            storage_file = session.query(Storage)\
+                .filter(Storage.map_id == sql_map.id)\
+                .filter(Storage.timestamp.between(mint, maxt))\
+                .all()
 
-    for m in timestamp_urls: # (timestamp, url)
-        path = file_storage.get(m[1], force=False)
+            sorted_files = sorted(storage_file, key=lambda sf: (sf.timestamp - datetime.now()).total_seconds())
+            storage_file = sorted_files[0]
+            return storage_file.path, get_map_info(sql_map, storage_file.timestamp)
 
-        add_map_to_storage(map.id,
-                           m[1],
-                           path,
-                           m[0],
-                           datetime.utcnow())
+        except NoResultFound, err:
+            if (datetime.now() - timestamp).total_seconds() > 3600*24:
+                #прошло больше суток? - нет карты
+                return None, 'карта не была загружена ранее'
+
+        timestamp_url_list = current_map_urls(sql_map)
+
+        if not timestamp_url_list:
+            log.error('ни одной карты на странице!')
+            return
+
+        for m in timestamp_url_list:  # (timestamp, url)
+            try:
+                path = file_storage.get(m[1], force=False)
+
+                new_file = Storage(url=m[0], path=path, timestamp=m[0],
+                          download_time=datetime.now(),
+                          map_id=sql_map.id)
+                session.add(new_file)
+
+            except Exception, err:
+                log.error(err)
 
 
-def get_map_by_time(map, timestamp):
+        try:
+            storage_file = session.query(Storage)\
+                .filter(Storage.map_id == sql_map.id)\
+                .filter((Storage.timestamp - timestamp).total_seconds() < sql_map.update_delay)\
+                .one()
+            return storage_file.path, get_map_info(sql_map, storage_file.timestamp)
 
-    if map.map_type == GISMETEO_MAP:
-        pass
-    elif map.map_type == PICTURE_MAP:
-        pass
+        except NoResultFound, err:
+            return None, 'карта отсутствует'
 
-def current_map_urls(map):
+
+def current_map_urls(sql_map):
     """
     [(timestamp, url)]
     :return:
     """
     frames = []
-    if map.map_type == GISMETEO_MAP:
+    if sql_map.map_type == GISMETEO_MAP:
 
         with Downloader() as d:
-            data = d.getresponse(map.url)
+            data = d.getresponse(sql_map.url)
             soup = bs4.BeautifulSoup(data, "html.parser")
 
         tab_i = 0
         try:
             while True:
                 imgs = soup.select('.tab%s > img' % tab_i)
-                if not imgs:
-                    return
+                if not len(imgs):
+                    break
                 for i in imgs:
                     date_object = datetime.strptime(i.attrs['alt'], '%d.%m.%Y %H:%M')
                     frame = date_object, 'https:' + i.attrs['title']
@@ -199,11 +213,11 @@ def current_map_urls(map):
         except Exception, err:
             pass
 
-    elif map.map_type == PICTURE_MAP:
+    elif sql_map.map_type == PICTURE_MAP:
 
-        return [(datetime.now(), map.url)]
+        return [(datetime.now(), sql_map.url)]
 
     return frames
 
-def get_map_info(map, timestamp):
-    return '%s\n%s' % (map.name, timestamp.strftime('%d.%m.%Y %H:%M'))
+def get_map_info(sql_map, timestamp):
+    return u'%s\n%s' % (sql_map.name, timestamp.strftime('%d.%m.%Y %H:%M'))

@@ -36,19 +36,30 @@ shelve_name = 'shelve.db'
 # ( user_id, выбранный сайт, выбранная карта )
 #context = dict()
 
-def shelve_get(chat_id, field, default):
-    storage = shelve.open(shelve_name)
-    try:
-        answer = storage[str(chat_id) + field]
-        storage.close()
-        return answer
-    except KeyError:
-        storage.close()
-        return default
+class Shelve(object):
 
+    def __init__(self):
+        self.storage = None
 
-def shelve_set(chat_id, field, value):
-    storage = shelve.open(shelve_name)
-    storage[str(chat_id) + field] = value
-    storage.close()
+    def __enter__(self):
+        self.open()
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()
+
+    def open(self):
+        self.storage = shelve.open(shelve_name)
+
+    def close(self):
+        self.storage.close()
+
+    def set(self, chat_id, field, value):
+        self.storage[str(chat_id) + field] = value
+
+    def get(self, chat_id, field, default):
+        try:
+            return self.storage[str(chat_id) + field]
+        except KeyError:
+            return default
 
