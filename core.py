@@ -120,6 +120,16 @@ def get_sql_map_id(name):
         map = session.query(Map).filter(Map.name == name).one()
         return map.id
 
+def get_sql_site_bot_path(id):
+    with DBSession() as session:
+        site = session.query(Site).get(id)
+        return site.bot_path
+
+def get_sql_map_name(id):
+    with DBSession() as session:
+        map = session.query(Map).get(id)
+        return map.name
+
 def maps_keyboard_layout(site_id, kb):
     maps = []
     with DBSession() as session:
@@ -132,6 +142,23 @@ def maps_keyboard_layout(site_id, kb):
     return [add_kb(maps[x:x+3]) for x in xrange(0, len(maps), 3)]
 
 
+def found_map_in_storage(session, sql_map, timestamp):
+    mint = timestamp - timedelta(seconds=sql_map.update_delay/2)
+    maxt = timestamp + timedelta(seconds=sql_map.update_delay/2)
+
+    storage_file = session.query(Storage)\
+        .filter(Storage.map_id == sql_map.id)\
+        .filter(Storage.timestamp.between(mint, maxt))\
+        .all()
+
+    if not len(storage_file):
+        raise NoResultFound()
+
+    sorted_files = sorted(storage_file, key=lambda sf: (sf.timestamp - datetime.now()).total_seconds())
+    storage_file = sorted_files[0]
+    return storage_file.path, get_map_info(sql_map, storage_file.timestamp)
+
+
 def get_map(map_id, timestamp):
 
     with DBSession() as session:
@@ -139,18 +166,7 @@ def get_map(map_id, timestamp):
 
         try:
             #Есть карта в хранилище за время Х ?
-
-            mint = timestamp - timedelta(seconds=sql_map.update_delay/2)
-            maxt = timestamp + timedelta(seconds=sql_map.update_delay/2)
-
-            storage_file = session.query(Storage)\
-                .filter(Storage.map_id == sql_map.id)\
-                .filter(Storage.timestamp.between(mint, maxt))\
-                .all()
-
-            sorted_files = sorted(storage_file, key=lambda sf: (sf.timestamp - datetime.now()).total_seconds())
-            storage_file = sorted_files[0]
-            return storage_file.path, get_map_info(sql_map, storage_file.timestamp)
+            return found_map_in_storage(session, sql_map, timestamp)
 
         except NoResultFound, err:
             if (datetime.now() - timestamp).total_seconds() > 3600*24:
@@ -175,14 +191,8 @@ def get_map(map_id, timestamp):
             except Exception, err:
                 log.error(err)
 
-
         try:
-            storage_file = session.query(Storage)\
-                .filter(Storage.map_id == sql_map.id)\
-                .filter((Storage.timestamp - timestamp).total_seconds() < sql_map.update_delay)\
-                .one()
-            return storage_file.path, get_map_info(sql_map, storage_file.timestamp)
-
+            return found_map_in_storage(session, sql_map, timestamp)
         except NoResultFound, err:
             return None, 'карта отсутствует'
 

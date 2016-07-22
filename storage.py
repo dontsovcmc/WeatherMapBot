@@ -57,7 +57,7 @@ class Shelve(object):
     def set(self, chat_id, field, value):
         self.storage[str(chat_id) + field] = value
 
-    def get(self, chat_id, field, default):
+    def get(self, chat_id, field, default=None):
         try:
             return self.storage[str(chat_id) + field]
         except KeyError:
