@@ -242,6 +242,10 @@ def main():
 
 def main_hook():
 
+    import os
+    from storage import file_storage
+    file_storage.work_dir = os.join.path(os.getcwd(), 'STORAGE')
+
     db_init()
 
     WEBHOOK_HOST = sys.argv[2]
