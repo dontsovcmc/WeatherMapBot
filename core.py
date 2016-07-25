@@ -10,9 +10,12 @@ from maps import weather_maps
 from maps import GISMETEO_MAP, PICTURE_MAP, LINK_MAP
 from logger import log
 from sqlalchemy.orm.exc import NoResultFound
+from sqlalchemy import and_
 from datetime import datetime, timedelta
 from storage import file_storage
 
+PREVIOUS_MAP = u'<<'
+NEXT_MAP = u'>>'
 CHANGE_SITE = u'Выбор сайта'
 CHANGE_MAP = u'Выбор карты'
 REFRESH = u'Обновить'
@@ -142,21 +145,41 @@ def maps_keyboard_layout(site_id, kb):
     return [add_kb(maps[x:x+3]) for x in xrange(0, len(maps), 3)]
 
 
-def found_map_in_storage(session, sql_map, timestamp):
-    mint = timestamp - timedelta(seconds=sql_map.update_delay/2)
-    maxt = timestamp + timedelta(seconds=sql_map.update_delay/2)
+def found_next_map_in_storage(session, sql_map, timestamp):
 
+    tomorrow = timestamp + timedelta(hours=24)
     storage_file = session.query(Storage)\
-        .filter(Storage.map_id == sql_map.id)\
-        .filter(Storage.timestamp.between(mint, maxt))\
-        .all()
+            .filter(Storage.map_id == sql_map.id)\
+            .filter(Storage.timestamp.between(timestamp, tomorrow))\
+            .all()
 
     if not len(storage_file):
         raise NoResultFound()
 
-    sorted_files = sorted(storage_file, key=lambda sf: (sf.timestamp - datetime.now()).total_seconds())
-    storage_file = sorted_files[0]
-    return storage_file.path, get_map_info(sql_map, storage_file.timestamp)
+    storage_file = sorted(storage_file, key=lambda sf: (sf.timestamp - datetime.now()).total_seconds())[0]
+    return storage_file
+
+
+def found_previous_map_in_storage(session, sql_map, timestamp):
+
+    yesterday = timestamp - timedelta(hours=24)
+    storage_file = session.query(Storage)\
+            .filter(Storage.map_id == sql_map.id)\
+            .filter(Storage.timestamp.between(yesterday, timestamp))\
+            .all()
+
+    if not len(storage_file):
+        raise NoResultFound()
+
+    storage_file = sorted(storage_file, key=lambda sf: (sf.timestamp - datetime.now()).total_seconds())[-1]
+    return storage_file
+
+
+def get_legend(map_id):
+
+    with DBSession() as session:
+        sql_map = session.query(Map).get(map_id)
+        return u'Легенда доступна по ссылке: %s' % sql_map.url
 
 
 def get_map(map_id, timestamp):
@@ -164,37 +187,35 @@ def get_map(map_id, timestamp):
     with DBSession() as session:
         sql_map = session.query(Map).get(map_id)
 
+        if not sql_map.last_update or (datetime.now() - sql_map.last_update).total_seconds() > sql_map.update_delay: # Данные устарели
+            timestamp_url_list = current_map_urls(sql_map)
+
+            sql_map.last_update = datetime.now()
+            session.commit()
+
+            if not timestamp_url_list:
+                log.error('ни одной карты на странице!')
+                return None, u'нет карт на странице'
+            else:
+                for m in timestamp_url_list:  # (timestamp, url)
+                    try:
+                        found = session.query(Storage).filter(and_(Storage.timestamp == m[0], Storage.map_id == sql_map.id)).all()
+                        if not len(found):
+                            path = file_storage.download(m[1], sql_map.id, m[0])
+
+                            new_file = Storage(url=m[0], path=path, timestamp=m[0],
+                                      download_time=datetime.now(),
+                                      map_id=sql_map.id)
+                            session.add(new_file)
+                            session.commit()
+                    except Exception, err:
+                        log.error(err)
         try:
-            #Есть карта в хранилище за время Х ?
-            return found_map_in_storage(session, sql_map, timestamp)
+            sql_file = found_next_map_in_storage(session, sql_map, timestamp)
+            return sql_file.path, get_map_info(sql_map, sql_file.timestamp)
 
-        except NoResultFound, err:
-            if (datetime.now() - timestamp).total_seconds() > 3600*24:
-                #прошло больше суток? - нет карты
-                return None, 'карта не была загружена ранее'
-
-        timestamp_url_list = current_map_urls(sql_map)
-
-        if not timestamp_url_list:
-            log.error('ни одной карты на странице!')
-            return
-
-        for m in timestamp_url_list:  # (timestamp, url)
-            try:
-                path = file_storage.get(m[1], force=False)
-
-                new_file = Storage(url=m[0], path=path, timestamp=m[0],
-                          download_time=datetime.now(),
-                          map_id=sql_map.id)
-                session.add(new_file)
-
-            except Exception, err:
-                log.error(err)
-
-        try:
-            return found_map_in_storage(session, sql_map, timestamp)
-        except NoResultFound, err:
-            return None, 'карта отсутствует'
+        except NoResultFound:
+            return None, u'карта отсутствует'
 
 
 def current_map_urls(sql_map):
@@ -230,4 +251,20 @@ def current_map_urls(sql_map):
     return frames
 
 def get_map_info(sql_map, timestamp):
-    return u'%s\n%s' % (sql_map.name, timestamp.strftime('%d.%m.%Y %H:%M'))
+    return u'%s\n%s\nЛегенда: /legend' % (sql_map.name, timestamp.strftime('%d.%m.%Y %H:%M'))
+
+
+def get_previous_timestamp_by_path(path):
+    with DBSession() as session:
+        storage_file = session.query(Storage).filter(Storage.path == path).one()
+        sql_map = session.query(Map).get(storage_file.map_id)
+        sql_file = found_previous_map_in_storage(session, sql_map, storage_file.timestamp-timedelta(seconds=1))
+        return sql_file.timestamp
+
+
+def get_next_timestamp_by_path(path):
+    with DBSession() as session:
+        storage_file = session.query(Storage).filter(Storage.path == path).one()
+        sql_map = session.query(Map).get(storage_file.map_id)
+        sql_file = found_next_map_in_storage(session, sql_map, storage_file.timestamp+timedelta(seconds=1))
+        return sql_file.timestamp

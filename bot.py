@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 __author__ = 'doncov.eugene'
 
-import sys
+import sys, traceback
 from logger import log
 
 
@@ -12,10 +12,12 @@ from telegram.ext import MessageHandler, Filters
 from telegram import ForceReply, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup
 
 from core import init as db_init
-from core import CHANGE_SITE, CHANGE_MAP, REFRESH
+from core import CHANGE_SITE, CHANGE_MAP, REFRESH, PREVIOUS_MAP, NEXT_MAP
 from core import maps_keyboard_layout, sites_keyboard_layout, get_site_id, get_sql_map_id
 from core import get_map, get_sql_map_name, get_sql_site_bot_path
-from datetime import datetime
+from core import get_legend, get_previous_timestamp_by_path, get_next_timestamp_by_path
+
+from datetime import datetime, timedelta
 from sqlalchemy.orm.exc import NoResultFound
 
 #import botan
@@ -26,6 +28,23 @@ updater = Updater(token=BOT_KEY)
 
 from storage import Shelve
 
+
+def exception_info():
+    traceback_template = '''Traceback (most recent call last):
+  File "%(filename)s", line %(lineno)s, in %(name)s
+%(type)s: %(message)s\n'''
+
+    exc_type, exc_value, exc_traceback = sys.exc_info()
+    traceback_details = {
+         'filename': exc_traceback.tb_frame.f_code.co_filename,
+         'lineno': exc_traceback.tb_lineno,
+         'name': exc_traceback.tb_frame.f_code.co_name,
+         'type': exc_type.__name__,
+         'message': exc_value.message}
+    del(exc_type, exc_value, exc_traceback)
+    return traceback.format_exc() + '\n' + traceback_template % traceback_details
+
+
 def set_user_data(chat_id, state, user_id=None, site_id=None, map_id=None):
     with Shelve() as sh:
         sh.set(chat_id, 'state', state)
@@ -33,6 +52,11 @@ def set_user_data(chat_id, state, user_id=None, site_id=None, map_id=None):
         sh.set(chat_id, 'site_id', site_id)
         sh.set(chat_id, 'map_id', map_id)
 
+
+show_map_reply_markup = ReplyKeyboardMarkup([
+    [KeyboardButton(PREVIOUS_MAP), KeyboardButton(REFRESH), KeyboardButton(NEXT_MAP)],
+    [KeyboardButton(CHANGE_SITE), KeyboardButton(CHANGE_MAP)]],
+    one_time_keyboard=True, resize_keyboard=True)
 
 
 def start(bot, update):
@@ -44,11 +68,11 @@ def start(bot, update):
         with Shelve() as sh:
             chat_user = sh.get(chat_id, 'user_id', None)
 
-        if text == '/start':
+        if text == '/start' or not chat_user:
             set_user_data(chat_id, '', user_id)
 
             reply_markup = ReplyKeyboardMarkup(sites_keyboard_layout(KeyboardButton), one_time_keyboard=True, resize_keyboard=True)
-            bot.sendMessage(chat_id, text="Выберите сайт", reply_markup=reply_markup)
+            bot.sendMessage(chat_id, text=u"Выберите сайт", reply_markup=reply_markup)
 
         elif chat_user and chat_user == user_id:
 
@@ -72,36 +96,66 @@ def start(bot, update):
 
                     start(bot, update)
 
+                elif update.message.text == PREVIOUS_MAP:
+                    with Shelve() as sh:
+                        p = sh.get(chat_id, 'last_map')
+                        if not p:
+                            update.message.text = REFRESH
+                            start(bot, update)
+
+                        try:
+                            timestamp = get_previous_timestamp_by_path(p)
+                            name = get_sql_map_name(sh.get(chat_id, 'map_id'))
+                            update.message.text = name + timestamp.strftime(' (%d.%m.%Y %H:%M)')
+                            start(bot, update)
+                        except NoResultFound:
+                            bot.sendMessage(chat_id, text=u'\n<изображение отсутствует>', reply_markup=show_map_reply_markup)
+
+                elif update.message.text == NEXT_MAP:
+                    with Shelve() as sh:
+                        p = sh.get(chat_id, 'last_map')
+                        if not p:
+                            update.message.text = REFRESH
+                            start(bot, update)
+
+                        try:
+                            timestamp = get_next_timestamp_by_path(p)
+                            name = get_sql_map_name(sh.get(chat_id, 'map_id'))
+                            update.message.text = name + timestamp.strftime(' (%d.%m.%Y %H:%M)')
+                            start(bot, update)
+                        except NoResultFound:
+                            bot.sendMessage(chat_id, text=u'\n<изображение отсутствует>', reply_markup=show_map_reply_markup)
+
                 else:
                     try:
-                        map_id = get_sql_map_id(update.message.text)
+                        if len(update.message.text.split(' (')) != 2:
+                            map_id = get_sql_map_id(update.message.text)
+                            timestamp = datetime.now()
+                        else:
+                            map_name, timestr = update.message.text.split(' (')
+                            map_id = get_sql_map_id(map_name)
+                            timestamp = datetime.strptime(timestr, '%d.%m.%Y %H:%M)') - timedelta(seconds=1)
+
                         with Shelve() as sh:
                             sh.set(chat_id, 'map_id', map_id)
 
-                        reply_markup = ReplyKeyboardMarkup([[KeyboardButton(CHANGE_SITE),
-                                                             KeyboardButton(CHANGE_MAP),
-                                                             KeyboardButton(REFRESH)]],
-                                                            one_time_keyboard=True, resize_keyboard=True)
-
-                        path, info = get_map(map_id, datetime.now())
+                        path, info = get_map(map_id, timestamp)
                         log.info('path %s' % path)
 
                         with Shelve() as sh:
                             p = sh.get(chat_id, 'last_map')
                             if p and p == path:
-                                bot.sendMessage(chat_id, text='<обновление отсутствует>', reply_markup=reply_markup)
+                                bot.sendMessage(chat_id, text=u'<обновление отсутствует>', reply_markup=show_map_reply_markup)
                                 return
-
-                        bot.sendMessage(chat_id, text=info, reply_markup=reply_markup)
 
                         if path:
                             with open(path.encode('utf-8'), 'rb') as image:
-                                bot.sendPhoto(chat_id, image, reply_markup=reply_markup)
+                                bot.sendPhoto(chat_id, image, caption=info.encode('utf-8'), reply_markup=show_map_reply_markup)
 
                                 with Shelve() as sh:
                                     sh.set(chat_id, 'last_map', path)
                         else:
-                            bot.sendMessage(chat_id, text='<изображение отсутствует>', reply_markup=reply_markup)
+                            bot.sendMessage(chat_id, text=info + u'\n<изображение отсутствует>', reply_markup=show_map_reply_markup)
 
                     except NoResultFound, err:
 
@@ -110,10 +164,31 @@ def start(bot, update):
                         set_user_data(chat_id, '', user_id, site_id)
                         reply_markup = ReplyKeyboardMarkup(maps_keyboard_layout(site_id, KeyboardButton),
                                                            one_time_keyboard=True, resize_keyboard=True)
-                        bot.sendMessage(chat_id, text="Выберите карту", reply_markup=reply_markup)
+                        bot.sendMessage(chat_id, text=u"Выберите карту", reply_markup=reply_markup)
 
     except Exception, err:
         log.error('start function error: %s' % str(err))
+        log.error(exception_info())
+        bot.sendMessage(chat_id, text=u"Что-то пошло не так. Начать сначала: /start")
+
+
+def legend_handler(bot, update):
+    chat_id = update.message.chat_id
+    user_id = update.message.from_user.id
+
+    try:
+        with Shelve() as sh:
+            map_id = sh.get(chat_id, 'map_id', None)
+        if map_id:
+            info = get_legend(map_id)
+            bot.sendMessage(chat_id, text=info, reply_markup=show_map_reply_markup)
+        else:
+            update.message.text = '/start'
+            set_user_data(chat_id, '', user_id)
+            start(bot, update)
+
+    except Exception, err:
+        log.error('legend_handler error: %s' % str(err))
         update.message.text = '/start'
         start(bot, update)
 
@@ -140,20 +215,21 @@ def test_handler(bot, update):
                 with open(path.encode('utf-8'), 'rb') as image:
                     bot.sendPhoto(chat_id, image, reply_markup=reply_markup)
             else:
-                bot.sendMessage(chat_id, text='<изображение отсутствует>', reply_markup=reply_markup)
+                bot.sendMessage(chat_id, text=u'<изображение отсутствует>', reply_markup=reply_markup)
 
         except Exception, err:
             log.error(err)
-            bot.sendMessage(chat_id, text='<internal error>', reply_markup=reply_markup)
+            bot.sendMessage(chat_id, text=u'<internal error>', reply_markup=reply_markup)
 
     except Exception, err:
         log.error(err)
-        bot.sendMessage(chat_id, text='<internal error>', reply_markup=reply_markup)
+        bot.sendMessage(chat_id, text=u'<internal error>', reply_markup=reply_markup)
 
 
 
 updater.dispatcher.add_handler(CommandHandler('start', start))
 updater.dispatcher.add_handler(MessageHandler([Filters.text], start))
+updater.dispatcher.add_handler(CommandHandler('legend', legend_handler))
 
 updater.dispatcher.add_handler(CommandHandler('test', test_handler))
 

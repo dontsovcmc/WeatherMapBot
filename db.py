@@ -45,6 +45,7 @@ class Map(Base):
     info = Column(String(100))
     url = Column(String(300))
     update_delay = Column(Integer)
+    last_update = Column(DateTime)
     region = Column(String(50))
     mtype = Column(String(50))
 

@@ -42,8 +42,12 @@ class Downloader(object):
         r1 = conn.getresponse()
         return r1.read()
 
-    def download_file(self, path, url):
-        fname = url.split('/')[-1].split('?')[0]
+    def download_file(self, path, url, fname):
+
+        f = url.split('/')[-1].split('?')[0]
+        if not fname:
+            fname = f
+        fname = fname + '.' + f.split('.')[-1]
 
         data = self.getresponse(url)
 

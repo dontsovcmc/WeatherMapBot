@@ -2,6 +2,7 @@
 __author__ = 'doncov.eugene'
 
 import tempfile
+import os
 
 from network import Downloader
 from logger import log
@@ -21,6 +22,18 @@ class FileStorage(object):
             path = d.download_file(self.work_dir, url)
         self.files[url] = path
         log.info('FileStorage: file downloaded to %s' % path)
+        return path
+
+    def download(self, url, map_id, timestamp):
+        root = self.work_dir
+        path = os.path.join(root, str(map_id), os.path.normpath(timestamp.strftime('%Y/%m/%d')))
+        fname = timestamp.strftime('%Y-%m-%d_%H-%M')
+
+        if not os.path.isdir(path):
+            os.makedirs(path)
+
+        with Downloader() as d:
+            path = d.download_file(path, url, fname)
         return path
 
 file_storage = FileStorage()
