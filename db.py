@@ -11,6 +11,32 @@ Base = declarative_base()
 engine = create_engine('sqlite:///weather_map.db')
 Base.metadata.bind = engine
 
+class MapType(Base):
+    """
+    """
+    __tablename__ = 'map_type'
+    id = Column(Integer, primary_key=True)
+    name_rus = Column(String(30), nullable=False)
+
+class Continent(Base):
+    """
+    """
+    __tablename__ = 'continent'
+    id = Column(Integer, primary_key=True)
+    name_rus = Column(String(30), nullable=False)
+
+
+class Region(Base):
+    """
+    """
+    __tablename__ = 'region'
+
+    id = Column(Integer, primary_key=True)
+    name_rus = Column(String(30), nullable=False)
+    continent_id = Column(Integer, ForeignKey('continent.id'))
+    continent = relationship(Continent)
+
+
 class Legend(Base):
     """
 
@@ -39,15 +65,18 @@ class Map(Base):
     __tablename__ = 'map'
 
     id = Column(Integer, primary_key=True)
-    map_type = Column(Integer, nullable=False)
-    name = Column(String(50), nullable=False)
+    parse_type = Column(Integer, nullable=False)
     bot_path = Column(String(50), nullable=False)
     info = Column(String(100))
     url = Column(String(300))
     update_delay = Column(Integer)
     last_update = Column(DateTime)
-    region = Column(String(50))
-    mtype = Column(String(50))
+
+    map_type_id = Column(Integer, ForeignKey('map_type.id'))
+    map_type = relationship(MapType)
+
+    region_id = Column(Integer, ForeignKey('region.id'))
+    region = relationship(Region)
 
     legend_id = Column(Integer, ForeignKey('legend.id'))
     legend = relationship(Legend)
