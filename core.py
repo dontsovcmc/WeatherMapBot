@@ -181,20 +181,18 @@ def get_site_id(bot_path):
 
 def get_continent_name(id):
     with DBSession() as session:
-        cont = session.query(Continent).get(id)
-        return cont.name_rus
+        obj = session.query(Continent).get(id)
+        return obj.name_rus
 
 def get_region_name(id):
     with DBSession() as session:
-        region = session.query(Region).get(id)
-        return region.name_rus
+        obj = session.query(Region).get(id)
+        return obj.name_rus
 
-def get_map_name(id):
+def get_map_type_name(id):
     with DBSession() as session:
-        sql_map = session.query(Map).get(id)
-        sql_map_type = session.query(MapType).get(sql_map.map_type_id)
-        sql_region = session.query(Region).get(sql_map.region_id)
-        return format_sql_map_name(sql_region, sql_map_type)
+        obj = session.query(MapType).get(id)
+        return obj.name_rus
 
 
 def get_continent_id(name):
@@ -209,14 +207,10 @@ def get_map_type_id(name):
     with DBSession() as session:
         return session.query(MapType).filter(MapType.name_rus == name).one().id
 
-def get_sql_map_id(name):
-
-    region_name, map_type = name.split(':')
-    region_id = get_region_id(region_name)
-    map_type_id = get_map_type_id(map_type)
-
+def get_map_id(region_id, map_type_id):
     with DBSession() as session:
-        return session.query(Map).filter(and_(Map.map_type_id == map_type_id, Map.region_id == region_id)).one().id
+        return session.query(Map).filter(
+            and_(Map.region_id == region_id, Map.map_type_id == map_type_id)).one().id
 
 
 def format_sql_map_name(sql_region, sql_map_type):
@@ -255,14 +249,15 @@ def maps_keyboard_layout(region_id, kb):
         sql_region = session.query(Region).get(region_id)
         for m in session.query(Map).filter(Map.region_id == region_id).all():
             sql_map_type = session.query(MapType).get(m.map_type_id)
-            maps.append(format_sql_map_name(sql_region, sql_map_type))
+            maps.append(sql_map_type.name_rus) # format_sql_map_name(sql_region, sql_map_type))
 
-    maps.append(CHANGE_CONT)
-    maps.append(CHANGE_REGION)
 
     def add_kb(maps):
         return [kb(m) for m in maps]
-    return [add_kb(maps[x:x+3]) for x in xrange(0, len(maps), 3)]
+
+    mkbd = [add_kb(maps[x:x+3]) for x in xrange(0, len(maps), 3)]
+    mkbd.append([kb(CHANGE_CONT), kb(CHANGE_REGION)])
+    return mkbd
 
 
 def found_next_map_in_storage(session, sql_map, timestamp):
@@ -344,7 +339,7 @@ def current_map_urls(sql_map):
     :return:
     """
     frames = []
-    if sql_map.map_type == GISMETEO_MAP:
+    if sql_map.parse_type == GISMETEO_MAP:
 
         with Downloader() as d:
             data = d.getresponse(sql_map.url)
@@ -364,7 +359,7 @@ def current_map_urls(sql_map):
         except Exception, err:
             pass
 
-    elif sql_map.map_type == PICTURE_MAP:
+    elif sql_map.parse_type == PICTURE_MAP:
 
         return [(datetime.now(), sql_map.url)]
 
