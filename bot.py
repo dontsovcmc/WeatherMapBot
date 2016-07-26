@@ -57,7 +57,7 @@ def start(bot, update):
             chat_user = sh.get(chat_id, 'user_id', None)
 
         if text == '/start' or not chat_user:
-            report.track_path(user_id, '/', 'start')
+            report.tack_screen(user_id, 'start')
             set_user_data(chat_id, '', user_id)
 
             bot.sendMessage(chat_id, text=CHANGE_CONT, reply_markup=start_reply_markup)
@@ -65,13 +65,13 @@ def start(bot, update):
         elif chat_user and chat_user == user_id:
 
             if update.message.text == CHANGE_CONT:
-                report.track_path(user_id, '/change_cont', CHANGE_CONT)
+                report.tack_screen(user_id, CHANGE_CONT)
                 set_user_data(chat_id, '', user_id)
                 update.message.text = '/start'
                 start(bot, update)
 
             elif update.message.text == CHANGE_REGION:
-                report.track_path(user_id, '/change_region', CHANGE_REGION)
+                report.tack_screen(user_id, CHANGE_REGION)
                 with Shelve() as sh:
                     update.message.text = get_continent_name(sh.get(chat_id, 'cont_id', ''))
                     sh.set(chat_id, 'cont_id', '')
@@ -79,7 +79,7 @@ def start(bot, update):
                 start(bot, update)
 
             elif update.message.text == CHANGE_MAP:
-                report.track_path(user_id, '/change_map', CHANGE_MAP)
+                report.tack_screen(user_id, CHANGE_MAP)
                 with Shelve() as sh:
                     update.message.text = get_region_name(sh.get(chat_id, 'region_id', ''))
                     sh.set(chat_id, 'region_id', '')
@@ -87,7 +87,7 @@ def start(bot, update):
                 start(bot, update)
 
             elif update.message.text == REFRESH:
-                report.track_path(user_id, '/refresh', REFRESH)
+                report.tack_screen(user_id, REFRESH)
                 with Shelve() as sh:
                     id = sh.get(chat_id, 'maptype_id')
                     if id:
@@ -106,7 +106,7 @@ def start(bot, update):
                 start(bot, update)
 
             elif update.message.text == PREVIOUS_MAP:
-                report.track_path(user_id, '/previous_map', PREVIOUS_MAP)
+                report.tack_screen(user_id, PREVIOUS_MAP)
                 with Shelve() as sh:
                     p = sh.get(chat_id, 'last_map')
                     if not p:
@@ -122,7 +122,7 @@ def start(bot, update):
                         bot.sendMessage(chat_id, text=u'\n<изображение отсутствует>', reply_markup=show_map_reply_markup)
 
             elif update.message.text == NEXT_MAP:
-                report.track_path(user_id, '/next_map', NEXT_MAP)
+                report.tack_screen(user_id, NEXT_MAP)
                 with Shelve() as sh:
                     p = sh.get(chat_id, 'last_map')
                     if not p:
@@ -153,7 +153,7 @@ def start(bot, update):
                                                            one_time_keyboard=True, resize_keyboard=True)
                         bot.sendMessage(chat_id, text=CHANGE_REGION, reply_markup=reply_markup)
 
-                        report.track_path(user_id, '/%s' % (continent_id), CHANGE_REGION)
+                        report.tack_screen(user_id, '/%s' % (continent_id))
 
                     elif not region_id:
 
@@ -165,7 +165,7 @@ def start(bot, update):
                                                            one_time_keyboard=True, resize_keyboard=True)
                         bot.sendMessage(chat_id, text=CHANGE_MAP, reply_markup=reply_markup)
 
-                        report.track_path(user_id, '/%s/%s' % (continent_id, region_id), CHANGE_MAP)
+                        report.tack_screen(user_id, '/%s/%s' % (continent_id, region_id))
 
                     elif not map_type_id:
 
@@ -177,7 +177,7 @@ def start(bot, update):
                             map_type_id = get_map_type_id(map_type_name)
                             timestamp = datetime.strptime(timestr, '%d.%m.%Y %H:%M)') - timedelta(seconds=1)
 
-                        report.track_path(user_id, '/%s/%s/%s' % (continent_id, region_id, map_type_id), 'map')
+                        report.tack_screen(user_id, '/%s/%s/%s' % (continent_id, region_id, map_type_id))
 
                         sh.set(chat_id, 'maptype_id', map_type_id)
                         map_id = get_map_id(region_id, map_type_id)
@@ -189,24 +189,24 @@ def start(bot, update):
                             if p and p == path:
                                 bot.sendMessage(chat_id, text=u'<обновление отсутствует>', reply_markup=show_map_reply_markup)
 
-                                report.track_path(user_id, '/%s/%s/%s/no_update' % (continent_id, region_id, map_type_id), 'no update')
+                                report.tack_screen(user_id, '/%s/%s/%s/no_update' % (continent_id, region_id, map_type_id))
                                 return
 
                         if path:
                             with open(path.encode('utf-8'), 'rb') as image:
                                 bot.sendPhoto(chat_id, image, caption=info.encode('utf-8'), reply_markup=show_map_reply_markup)
 
-                                report.track_path(user_id, '/%s/%s/%s/ok' % (continent_id, region_id, map_type_id), 'ok')
+                                report.tack_screen(user_id, '/%s/%s/%s/ok' % (continent_id, region_id, map_type_id))
                                 with Shelve() as sh:
                                     sh.set(chat_id, 'last_map', path)
                         else:
                             bot.sendMessage(chat_id, text=info + u'\n<изображение отсутствует>', reply_markup=show_map_reply_markup)
-                            report.track_path(user_id, '/%s/%s/%s/no_image' % (continent_id, region_id, map_type_id), 'no image')
+                            report.tack_screen(user_id, '/%s/%s/%s/no_image' % (continent_id, region_id, map_type_id))
 
     except Exception, err:
         log.error('start function error: %s' % str(err))
         log.error(exception_info())
-        report.track_path(user_id, '/error', 'error')
+        report.tack_screen(user_id, '/error')
         bot.sendMessage(chat_id, text=u"Что-то пошло не так. Начать сначала: /start")
 
 
