@@ -296,6 +296,22 @@ def get_legend(map_id):
         sql_map = session.query(Map).get(map_id)
         return u'Легенда доступна по ссылке: %s' % sql_map.url
 
+def add_urls_to_storage(session, map_id, timestamp_url_list):
+
+    for m in timestamp_url_list:  # (timestamp, url)
+        try:
+            found = session.query(Storage).filter(and_(Storage.timestamp == m[0], Storage.map_id == map_id)).all()
+            if not len(found):
+                path = file_storage.download(m[1], map_id, m[0])
+
+                new_file = Storage(url=m[1], path=path, timestamp=m[0],
+                          download_time=datetime.now(),
+                          map_id=map_id)
+                session.add(new_file)
+                session.commit()
+        except Exception, err:
+            log.error(err)
+
 
 def get_map(map_id, timestamp):
 
@@ -312,19 +328,7 @@ def get_map(map_id, timestamp):
                 log.error('ни одной карты на странице!')
                 return None, u'нет карт на странице'
             else:
-                for m in timestamp_url_list:  # (timestamp, url)
-                    try:
-                        found = session.query(Storage).filter(and_(Storage.timestamp == m[0], Storage.map_id == sql_map.id)).all()
-                        if not len(found):
-                            path = file_storage.download(m[1], sql_map.id, m[0])
-
-                            new_file = Storage(url=m[1], path=path, timestamp=m[0],
-                                      download_time=datetime.now(),
-                                      map_id=sql_map.id)
-                            session.add(new_file)
-                            session.commit()
-                    except Exception, err:
-                        log.error(err)
+                add_urls_to_storage(session, sql_map.id, timestamp_url_list)
         try:
             sql_file = found_next_map_in_storage(session, sql_map, timestamp)
             return sql_file.path, get_map_info(session, sql_map, sql_file.timestamp)
