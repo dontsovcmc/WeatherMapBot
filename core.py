@@ -368,7 +368,7 @@ def current_map_urls(sql_map):
 def get_map_info(session, sql_map, timestamp):
     sql_map_type = session.query(MapType).get(sql_map.map_type_id)
     sql_region = session.query(Region).get(sql_map.region_id)
-    return u'%s:%s %s\nЛегенда: /legend' % (sql_region.name_rus, sql_map_type.name_rus,
+    return u'%s:%s\n%s\nЛегенда: /legend' % (sql_region.name_rus, sql_map_type.name_rus,
                                           timestamp.strftime('%d.%m.%Y %H:%M'))
 
 

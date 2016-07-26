@@ -1,15 +1,18 @@
 # -*- coding: utf-8 -*-
 __author__ = 'doncov.eugene'
 
-import sys, traceback
+import sys
 from logger import log
-
+from datetime import datetime, timedelta
 
 from telegram.ext import Updater
 from telegram.ext import CommandHandler, CallbackQueryHandler
 from telegram.ext import MessageHandler, Filters
-
 from telegram import ForceReply, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup
+
+from sqlalchemy.orm.exc import NoResultFound
+
+from service import exception_info
 
 from core import init as db_init
 from core import CHANGE_CONT, CHANGE_REGION, CHANGE_MAP, REFRESH, PREVIOUS_MAP, NEXT_MAP
@@ -18,31 +21,11 @@ from core import get_map_id, get_map_type_id, get_region_id, get_continent_id
 from core import get_map, get_continent_name, get_region_name, get_map_type_name
 from core import get_legend, get_previous_timestamp_by_path, get_next_timestamp_by_path
 
-from datetime import datetime, timedelta
-from sqlalchemy.orm.exc import NoResultFound
-
-
-BOT_KEY = sys.argv[1]
-
-updater = Updater(token=BOT_KEY)
-
 from storage import Shelve
 
+from report import report
 
-def exception_info():
-    traceback_template = '''Traceback (most recent call last):
-  File "%(filename)s", line %(lineno)s, in %(name)s
-%(type)s: %(message)s\n'''
-
-    exc_type, exc_value, exc_traceback = sys.exc_info()
-    traceback_details = {
-         'filename': exc_traceback.tb_frame.f_code.co_filename,
-         'lineno': exc_traceback.tb_lineno,
-         'name': exc_traceback.tb_frame.f_code.co_name,
-         'type': exc_type.__name__,
-         'message': exc_value.message}
-    del(exc_type, exc_value, exc_traceback)
-    return traceback.format_exc() + '\n' + traceback_template % traceback_details
+updater = Updater(token=sys.argv[1])
 
 
 def set_user_data(chat_id, state, user_id='', cont_id='', region_id='', maptype_id=''):
@@ -59,6 +42,10 @@ show_map_reply_markup = ReplyKeyboardMarkup([
     [KeyboardButton(CHANGE_CONT), KeyboardButton(CHANGE_REGION), KeyboardButton(CHANGE_MAP)]],
     one_time_keyboard=True, resize_keyboard=True)
 
+start_reply_markup = ReplyKeyboardMarkup(continent_keyboard_layout(KeyboardButton),
+                                         one_time_keyboard=True, resize_keyboard=True)
+
+
 
 def start(bot, update):
     chat_id = update.message.chat_id
@@ -70,21 +57,21 @@ def start(bot, update):
             chat_user = sh.get(chat_id, 'user_id', None)
 
         if text == '/start' or not chat_user:
+            report.track_path(user_id, '/', 'start')
             set_user_data(chat_id, '', user_id)
 
-            reply_markup = ReplyKeyboardMarkup(continent_keyboard_layout(KeyboardButton), one_time_keyboard=True, resize_keyboard=True)
-            bot.sendMessage(chat_id, text=CHANGE_CONT, reply_markup=reply_markup)
+            bot.sendMessage(chat_id, text=CHANGE_CONT, reply_markup=start_reply_markup)
 
         elif chat_user and chat_user == user_id:
 
             if update.message.text == CHANGE_CONT:
-
+                report.track_path(user_id, '/change_cont', CHANGE_CONT)
                 set_user_data(chat_id, '', user_id)
                 update.message.text = '/start'
                 start(bot, update)
 
             elif update.message.text == CHANGE_REGION:
-
+                report.track_path(user_id, '/change_region', CHANGE_REGION)
                 with Shelve() as sh:
                     update.message.text = get_continent_name(sh.get(chat_id, 'cont_id', ''))
                     sh.set(chat_id, 'cont_id', '')
@@ -92,7 +79,7 @@ def start(bot, update):
                 start(bot, update)
 
             elif update.message.text == CHANGE_MAP:
-
+                report.track_path(user_id, '/change_map', CHANGE_MAP)
                 with Shelve() as sh:
                     update.message.text = get_region_name(sh.get(chat_id, 'region_id', ''))
                     sh.set(chat_id, 'region_id', '')
@@ -100,6 +87,7 @@ def start(bot, update):
                 start(bot, update)
 
             elif update.message.text == REFRESH:
+                report.track_path(user_id, '/refresh', REFRESH)
                 with Shelve() as sh:
                     id = sh.get(chat_id, 'maptype_id')
                     if id:
@@ -118,6 +106,7 @@ def start(bot, update):
                 start(bot, update)
 
             elif update.message.text == PREVIOUS_MAP:
+                report.track_path(user_id, '/previous_map', PREVIOUS_MAP)
                 with Shelve() as sh:
                     p = sh.get(chat_id, 'last_map')
                     if not p:
@@ -133,6 +122,7 @@ def start(bot, update):
                         bot.sendMessage(chat_id, text=u'\n<изображение отсутствует>', reply_markup=show_map_reply_markup)
 
             elif update.message.text == NEXT_MAP:
+                report.track_path(user_id, '/next_map', NEXT_MAP)
                 with Shelve() as sh:
                     p = sh.get(chat_id, 'last_map')
                     if not p:
@@ -161,7 +151,9 @@ def start(bot, update):
 
                         reply_markup = ReplyKeyboardMarkup(region_keyboard_layout(cont_id, KeyboardButton),
                                                            one_time_keyboard=True, resize_keyboard=True)
-                        bot.sendMessage(chat_id, text=CHANGE_CONT, reply_markup=reply_markup)
+                        bot.sendMessage(chat_id, text=CHANGE_REGION, reply_markup=reply_markup)
+
+                        report.track_path(user_id, '/%s' % (continent_id), CHANGE_REGION)
 
                     elif not region_id:
 
@@ -171,7 +163,9 @@ def start(bot, update):
 
                         reply_markup = ReplyKeyboardMarkup(maps_keyboard_layout(region_id, KeyboardButton),
                                                            one_time_keyboard=True, resize_keyboard=True)
-                        bot.sendMessage(chat_id, text=CHANGE_REGION, reply_markup=reply_markup)
+                        bot.sendMessage(chat_id, text=CHANGE_MAP, reply_markup=reply_markup)
+
+                        report.track_path(user_id, '/%s/%s' % (continent_id, region_id), CHANGE_MAP)
 
                     elif not map_type_id:
 
@@ -183,6 +177,8 @@ def start(bot, update):
                             map_type_id = get_map_type_id(map_type_name)
                             timestamp = datetime.strptime(timestr, '%d.%m.%Y %H:%M)') - timedelta(seconds=1)
 
+                        report.track_path(user_id, '/%s/%s/%s' % (continent_id, region_id, map_type_id), 'map')
+
                         sh.set(chat_id, 'maptype_id', map_type_id)
                         map_id = get_map_id(region_id, map_type_id)
                         path, info = get_map(map_id, timestamp)
@@ -192,20 +188,25 @@ def start(bot, update):
                             p = sh.get(chat_id, 'last_map')
                             if p and p == path:
                                 bot.sendMessage(chat_id, text=u'<обновление отсутствует>', reply_markup=show_map_reply_markup)
+
+                                report.track_path(user_id, '/%s/%s/%s/no_update' % (continent_id, region_id, map_type_id), 'no update')
                                 return
 
                         if path:
                             with open(path.encode('utf-8'), 'rb') as image:
                                 bot.sendPhoto(chat_id, image, caption=info.encode('utf-8'), reply_markup=show_map_reply_markup)
 
+                                report.track_path(user_id, '/%s/%s/%s/ok' % (continent_id, region_id, map_type_id), 'ok')
                                 with Shelve() as sh:
                                     sh.set(chat_id, 'last_map', path)
                         else:
                             bot.sendMessage(chat_id, text=info + u'\n<изображение отсутствует>', reply_markup=show_map_reply_markup)
+                            report.track_path(user_id, '/%s/%s/%s/no_image' % (continent_id, region_id, map_type_id), 'no image')
 
     except Exception, err:
         log.error('start function error: %s' % str(err))
         log.error(exception_info())
+        report.track_path(user_id, '/error', 'error')
         bot.sendMessage(chat_id, text=u"Что-то пошло не так. Начать сначала: /start")
 
 
@@ -283,7 +284,7 @@ def main_hook():
 
     db_init()
 
-    WEBHOOK_HOST = sys.argv[2]
+    WEBHOOK_HOST = sys.argv[3]
     WEBHOOK_PORT = 443  # 443, 80, 88 или 8443
     WEBHOOK_LISTEN = '0.0.0.0'
 

@@ -1,3 +1,4 @@
 beautifulsoup4
 SQLAlchemy
 python-telegram-bot
+universal-analytics-python
