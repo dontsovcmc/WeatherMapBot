@@ -124,7 +124,7 @@ weather_maps = [
     WeatherMap(GISMETEO_MAP, '657', '', 'https://www.gismeteo.ru/map/657/', 10*60, emaptype.radar, eregion.belarus, elegends.gismeteo_ru_radar),
     WeatherMap(GISMETEO_MAP, '658', '', 'https://www.gismeteo.ru/map/658/', 10*60, emaptype.radar, eregion.baltic, elegends.gismeteo_ru_radar),
 
-    WeatherMap(PICTURE_MAP, 'spb_radar', '', 'http://meteoinfo.by/radar/RUSP/RUSP_latest.png/', 360*60, emaptype.radar, eregion.spb, elegends.meteoinfo_by_radar),
+    WeatherMap(PICTURE_MAP, 'spb_radar', '', 'http://meteoinfo.by/radar/RUSP/RUSP_latest.png', 360*60, emaptype.radar, eregion.spb, elegends.meteoinfo_by_radar),
 ]
 
 #PictureMap(u'СПБ: Радар (анимир)', 'http://meteoinfo.by/radar/RUSP/radar-map.gif')]

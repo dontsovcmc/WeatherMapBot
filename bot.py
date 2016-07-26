@@ -42,9 +42,6 @@ show_map_reply_markup = ReplyKeyboardMarkup([
     [KeyboardButton(CHANGE_CONT), KeyboardButton(CHANGE_REGION), KeyboardButton(CHANGE_MAP)]],
     one_time_keyboard=True, resize_keyboard=True)
 
-start_reply_markup = ReplyKeyboardMarkup(continent_keyboard_layout(KeyboardButton),
-                                         one_time_keyboard=True, resize_keyboard=True)
-
 
 
 def start(bot, update):
@@ -60,6 +57,9 @@ def start(bot, update):
             report.tack_screen(user_id, 'start')
             set_user_data(chat_id, '', user_id)
 
+            start_reply_markup = ReplyKeyboardMarkup(continent_keyboard_layout(KeyboardButton),
+                                                     one_time_keyboard=True, resize_keyboard=True)
+
             bot.sendMessage(chat_id, text=CHANGE_CONT, reply_markup=start_reply_markup)
 
         elif chat_user and chat_user == user_id:
@@ -74,7 +74,8 @@ def start(bot, update):
                 report.tack_screen(user_id, CHANGE_REGION)
                 with Shelve() as sh:
                     update.message.text = get_continent_name(sh.get(chat_id, 'cont_id', ''))
-                    sh.set(chat_id, 'cont_id', '')
+                    sh.set(chat_id, 'cont_id', None)
+                    sh.set(chat_id, 'region_id', None)
 
                 start(bot, update)
 
@@ -82,7 +83,7 @@ def start(bot, update):
                 report.tack_screen(user_id, CHANGE_MAP)
                 with Shelve() as sh:
                     update.message.text = get_region_name(sh.get(chat_id, 'region_id', ''))
-                    sh.set(chat_id, 'region_id', '')
+                    sh.set(chat_id, 'region_id', None)
 
                 start(bot, update)
 
