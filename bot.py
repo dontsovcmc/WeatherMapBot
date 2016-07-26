@@ -12,9 +12,10 @@ from telegram.ext import MessageHandler, Filters
 from telegram import ForceReply, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup
 
 from core import init as db_init
-from core import CHANGE_SITE, CHANGE_MAP, REFRESH, PREVIOUS_MAP, NEXT_MAP
-from core import maps_keyboard_layout, sites_keyboard_layout, get_site_id, get_sql_map_id
-from core import get_map, get_sql_map_name, get_sql_site_bot_path
+from core import CHANGE_CONT, CHANGE_REGION, CHANGE_MAP, REFRESH, PREVIOUS_MAP, NEXT_MAP
+from core import maps_keyboard_layout, continent_keyboard_layout, region_keyboard_layout
+from core import get_sql_map_id, get_continent_name, get_region_name, get_region_id, get_continent_id
+from core import get_map, get_map_name
 from core import get_legend, get_previous_timestamp_by_path, get_next_timestamp_by_path
 
 from datetime import datetime, timedelta
@@ -45,17 +46,18 @@ def exception_info():
     return traceback.format_exc() + '\n' + traceback_template % traceback_details
 
 
-def set_user_data(chat_id, state, user_id=None, site_id=None, map_id=None):
+def set_user_data(chat_id, state, user_id=None, cont_id=None, region_id=None, map_id=None):
     with Shelve() as sh:
         sh.set(chat_id, 'state', state)
         sh.set(chat_id, 'user_id', user_id)
-        sh.set(chat_id, 'site_id', site_id)
+        sh.set(chat_id, 'cont_id', cont_id)
+        sh.set(chat_id, 'region_id', region_id)
         sh.set(chat_id, 'map_id', map_id)
 
 
 show_map_reply_markup = ReplyKeyboardMarkup([
     [KeyboardButton(PREVIOUS_MAP), KeyboardButton(REFRESH), KeyboardButton(NEXT_MAP)],
-    [KeyboardButton(CHANGE_SITE), KeyboardButton(CHANGE_MAP)]],
+    [KeyboardButton(CHANGE_CONT), KeyboardButton(CHANGE_REGION), KeyboardButton(CHANGE_MAP)]],
     one_time_keyboard=True, resize_keyboard=True)
 
 
@@ -71,100 +73,120 @@ def start(bot, update):
         if text == '/start' or not chat_user:
             set_user_data(chat_id, '', user_id)
 
-            reply_markup = ReplyKeyboardMarkup(sites_keyboard_layout(KeyboardButton), one_time_keyboard=True, resize_keyboard=True)
-            bot.sendMessage(chat_id, text=u"Выберите сайт", reply_markup=reply_markup)
+            reply_markup = ReplyKeyboardMarkup(continent_keyboard_layout(KeyboardButton), one_time_keyboard=True, resize_keyboard=True)
+            bot.sendMessage(chat_id, text=CHANGE_CONT, reply_markup=reply_markup)
 
         elif chat_user and chat_user == user_id:
 
-                if update.message.text == CHANGE_SITE:
+            if update.message.text == CHANGE_CONT:
 
-                    set_user_data(chat_id, '', user_id, '', '')
-                    update.message.text = '/start'
-                    start(bot, update)
+                set_user_data(chat_id, '', user_id, '', '')
+                update.message.text = '/start'
+                start(bot, update)
 
-                elif update.message.text == CHANGE_MAP:
+            elif update.message.text == CHANGE_REGION:
 
-                    with Shelve() as sh:
-                        sh.set(chat_id, 'map_id', '')
-                        update.message.text = get_sql_site_bot_path(sh.get(chat_id, 'site_id', ''))
+                with Shelve() as sh:
+                    sh.set(chat_id, 'region_id', '')
+                    update.message.text = get_continent_name(sh.get(chat_id, 'cont_id', ''))
 
-                    start(bot, update)
+                start(bot, update)
 
-                elif update.message.text == REFRESH:
-                    with Shelve() as sh:
-                        update.message.text = get_sql_map_name(sh.get(chat_id, 'map_id'))
+            elif update.message.text == CHANGE_MAP:
 
-                    start(bot, update)
+                with Shelve() as sh:
+                    sh.set(chat_id, 'map_id', '')
+                    update.message.text = get_region_name(sh.get(chat_id, 'region_id', ''))
 
-                elif update.message.text == PREVIOUS_MAP:
-                    with Shelve() as sh:
-                        p = sh.get(chat_id, 'last_map')
-                        if not p:
-                            update.message.text = REFRESH
-                            start(bot, update)
+                start(bot, update)
 
-                        try:
-                            timestamp = get_previous_timestamp_by_path(p)
-                            name = get_sql_map_name(sh.get(chat_id, 'map_id'))
-                            update.message.text = name + timestamp.strftime(' (%d.%m.%Y %H:%M)')
-                            start(bot, update)
-                        except NoResultFound:
-                            bot.sendMessage(chat_id, text=u'\n<изображение отсутствует>', reply_markup=show_map_reply_markup)
+            elif update.message.text == REFRESH:
+                with Shelve() as sh:
+                    update.message.text = get_map_name(sh.get(chat_id, 'map_id'))
 
-                elif update.message.text == NEXT_MAP:
-                    with Shelve() as sh:
-                        p = sh.get(chat_id, 'last_map')
-                        if not p:
-                            update.message.text = REFRESH
-                            start(bot, update)
+                start(bot, update)
 
-                        try:
-                            timestamp = get_next_timestamp_by_path(p)
-                            name = get_sql_map_name(sh.get(chat_id, 'map_id'))
-                            update.message.text = name + timestamp.strftime(' (%d.%m.%Y %H:%M)')
-                            start(bot, update)
-                        except NoResultFound:
-                            bot.sendMessage(chat_id, text=u'\n<изображение отсутствует>', reply_markup=show_map_reply_markup)
+            elif update.message.text == PREVIOUS_MAP:
+                with Shelve() as sh:
+                    p = sh.get(chat_id, 'last_map')
+                    if not p:
+                        update.message.text = REFRESH
+                        start(bot, update)
 
-                else:
                     try:
-                        if len(update.message.text.split(' (')) != 2:
-                            map_id = get_sql_map_id(update.message.text)
-                            timestamp = datetime.now()
-                        else:
-                            map_name, timestr = update.message.text.split(' (')
-                            map_id = get_sql_map_id(map_name)
-                            timestamp = datetime.strptime(timestr, '%d.%m.%Y %H:%M)') - timedelta(seconds=1)
+                        timestamp = get_previous_timestamp_by_path(p)
+                        name = get_map_name(sh.get(chat_id, 'map_id'))
+                        update.message.text = name + timestamp.strftime(' (%d.%m.%Y %H:%M)')
+                        start(bot, update)
+                    except NoResultFound:
+                        bot.sendMessage(chat_id, text=u'\n<изображение отсутствует>', reply_markup=show_map_reply_markup)
 
+            elif update.message.text == NEXT_MAP:
+                with Shelve() as sh:
+                    p = sh.get(chat_id, 'last_map')
+                    if not p:
+                        update.message.text = REFRESH
+                        start(bot, update)
+
+                    try:
+                        timestamp = get_next_timestamp_by_path(p)
+                        name = get_map_name(sh.get(chat_id, 'map_id'))
+                        update.message.text = name + timestamp.strftime(' (%d.%m.%Y %H:%M)')
+                        start(bot, update)
+                    except NoResultFound:
+                        bot.sendMessage(chat_id, text=u'\n<изображение отсутствует>', reply_markup=show_map_reply_markup)
+
+            else:
+                try:
+                    if len(update.message.text.split(' (')) != 2:
+                        map_id = get_sql_map_id(update.message.text)
+                        timestamp = datetime.now()
+                    else:
+                        map_name, timestr = update.message.text.split(' (')
+                        map_id = get_sql_map_id(map_name)
+                        timestamp = datetime.strptime(timestr, '%d.%m.%Y %H:%M)') - timedelta(seconds=1)
+
+                    with Shelve() as sh:
+                        sh.set(chat_id, 'map_id', map_id)
+
+                    path, info = get_map(map_id, timestamp)
+                    log.info('path %s' % path)
+
+                    with Shelve() as sh:
+                        p = sh.get(chat_id, 'last_map')
+                        if p and p == path:
+                            bot.sendMessage(chat_id, text=u'<обновление отсутствует>', reply_markup=show_map_reply_markup)
+                            return
+
+                    if path:
+                        with open(path.encode('utf-8'), 'rb') as image:
+                            bot.sendPhoto(chat_id, image, caption=info.encode('utf-8'), reply_markup=show_map_reply_markup)
+
+                            with Shelve() as sh:
+                                sh.set(chat_id, 'last_map', path)
+                    else:
+                        bot.sendMessage(chat_id, text=info + u'\n<изображение отсутствует>', reply_markup=show_map_reply_markup)
+
+                except NoResultFound:
+
+                    try:
+                        region_id = get_region_id(update.message.text)
                         with Shelve() as sh:
-                            sh.set(chat_id, 'map_id', map_id)
+                            sh.set(chat_id, 'region_id', region_id)
 
-                        path, info = get_map(map_id, timestamp)
-                        log.info('path %s' % path)
-
-                        with Shelve() as sh:
-                            p = sh.get(chat_id, 'last_map')
-                            if p and p == path:
-                                bot.sendMessage(chat_id, text=u'<обновление отсутствует>', reply_markup=show_map_reply_markup)
-                                return
-
-                        if path:
-                            with open(path.encode('utf-8'), 'rb') as image:
-                                bot.sendPhoto(chat_id, image, caption=info.encode('utf-8'), reply_markup=show_map_reply_markup)
-
-                                with Shelve() as sh:
-                                    sh.set(chat_id, 'last_map', path)
-                        else:
-                            bot.sendMessage(chat_id, text=info + u'\n<изображение отсутствует>', reply_markup=show_map_reply_markup)
-
-                    except NoResultFound, err:
-
-                        site_id = get_site_id(update.message.text)
-
-                        set_user_data(chat_id, '', user_id, site_id)
-                        reply_markup = ReplyKeyboardMarkup(maps_keyboard_layout(site_id, KeyboardButton),
+                        reply_markup = ReplyKeyboardMarkup(maps_keyboard_layout(region_id, KeyboardButton),
                                                            one_time_keyboard=True, resize_keyboard=True)
-                        bot.sendMessage(chat_id, text=u"Выберите карту", reply_markup=reply_markup)
+                        bot.sendMessage(chat_id, text=CHANGE_REGION, reply_markup=reply_markup)
+
+                    except NoResultFound:
+                        cont_id = get_continent_id(update.message.text)
+                        with Shelve() as sh:
+                            sh.set(chat_id, 'cont_id', cont_id)
+
+                        reply_markup = ReplyKeyboardMarkup(region_keyboard_layout(cont_id, KeyboardButton),
+                                                           one_time_keyboard=True, resize_keyboard=True)
+                        bot.sendMessage(chat_id, text=CHANGE_CONT, reply_markup=reply_markup)
+
 
     except Exception, err:
         log.error('start function error: %s' % str(err))
@@ -200,7 +222,7 @@ def test_handler(bot, update):
     chat_id = update.message.chat_id
     try:
         try:
-            reply_markup = ReplyKeyboardMarkup([[KeyboardButton(CHANGE_SITE),
+            reply_markup = ReplyKeyboardMarkup([[KeyboardButton(CHANGE_CONT),
                                                              KeyboardButton(CHANGE_MAP),
                                                              KeyboardButton(REFRESH)]],
                                                             one_time_keyboard=True, resize_keyboard=True)

@@ -17,8 +17,9 @@ from maps import elegends, emaptype, eregion, econtinent
 
 PREVIOUS_MAP = u'<<'
 NEXT_MAP = u'>>'
-CHANGE_SITE = u'Выбор сайта'
-CHANGE_MAP = u'Выбор карты'
+CHANGE_CONT = u'Выбор континета'
+CHANGE_REGION = u'Выбор региона'
+CHANGE_MAP = u'Выбор типа карты'
 REFRESH = u'Обновить'
 
 def init():
@@ -178,30 +179,86 @@ def get_site_id(bot_path):
         site = session.query(Site).filter(Site.bot_path == bot_path).one()
         return site.id
 
-
-def get_sql_map_id(name):
+def get_continent_name(id):
     with DBSession() as session:
-        map = session.query(Map).filter(Map.name == name).one()
-        return map.id
+        cont = session.query(Continent).get(id)
+        return cont.name_rus
 
-def get_sql_site_bot_path(id):
+def get_region_name(id):
     with DBSession() as session:
-        site = session.query(Site).get(id)
-        return site.bot_path
+        region = session.query(Region).get(id)
+        return region.name_rus
 
-def get_sql_map_name(id):
+def get_map_name(id):
     with DBSession() as session:
         sql_map = session.query(Map).get(id)
         sql_map_type = session.query(MapType).get(sql_map.map_type_id)
         sql_region = session.query(Region).get(sql_map.region_id)
-        return "%s:%s" % (sql_region.name_rus, sql_map_type.rus)
+        return format_sql_map_name(sql_region, sql_map_type)
 
-def maps_keyboard_layout(site_id, kb):
+
+def get_continent_id(name):
+    with DBSession() as session:
+        return session.query(Continent).filter(Continent.name_rus == name).one().id
+
+def get_region_id(name):
+    with DBSession() as session:
+        return session.query(Region).filter(Region.name_rus == name).one().id
+
+def get_map_type_id(name):
+    with DBSession() as session:
+        return session.query(MapType).filter(MapType.name_rus == name).one().id
+
+def get_sql_map_id(name):
+
+    region_name, map_type = name.split(':')
+    region_id = get_region_id(region_name)
+    map_type_id = get_map_type_id(map_type)
+
+    with DBSession() as session:
+        return session.query(Map).filter(and_(Map.map_type_id == map_type_id, Map.region_id == region_id)).one().id
+
+
+def format_sql_map_name(sql_region, sql_map_type):
+    return "%s:%s" % (sql_region.name_rus, sql_map_type.name_rus)
+
+
+def continent_keyboard_layout(kb):
+    cont = []
+    with DBSession() as session:
+        sql_cont = session.query(Continent).all()
+        for c in sql_cont:
+            cont.append(c.name_rus)
+
+    def add_kb(maps):
+        return [kb(m) for m in maps]
+    return [add_kb(cont[x:x+3]) for x in xrange(0, len(cont), 3)]
+
+
+def region_keyboard_layout(continent_id, kb):
     maps = []
     with DBSession() as session:
-        for m in session.query(Map).filter(Map.site_id == site_id).all():
-            maps.append(m.name)
-    maps.append(CHANGE_SITE)
+        regions = session.query(Region).filter(Region.continent_id == continent_id).all()
+        for r in regions:
+            maps.append(r.name_rus)
+
+    maps.append(CHANGE_CONT)
+
+    def add_kb(maps):
+        return [kb(m) for m in maps]
+    return [add_kb(maps[x:x+3]) for x in xrange(0, len(maps), 3)]
+
+
+def maps_keyboard_layout(region_id, kb):
+    maps = []
+    with DBSession() as session:
+        sql_region = session.query(Region).get(region_id)
+        for m in session.query(Map).filter(Map.region_id == region_id).all():
+            sql_map_type = session.query(MapType).get(m.map_type_id)
+            maps.append(format_sql_map_name(sql_region, sql_map_type))
+
+    maps.append(CHANGE_CONT)
+    maps.append(CHANGE_REGION)
 
     def add_kb(maps):
         return [kb(m) for m in maps]
