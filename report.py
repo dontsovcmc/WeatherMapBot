@@ -32,18 +32,23 @@ class ReportTrackers():
             del self.trackers[str(client_id)]
 
     def track_event(self, client_id, category, action):
+        log.info('track_event %s: %s %s' % (client_id, category, action))
+
         if not self.TRACK_ID: return
         if not str(client_id) in self.trackers:
             self.add_tracker(client_id)
         self.trackers[str(client_id)].track_event(category, action)
 
     def track_path(self, client_id, path, title):
+        log.info('track_path %s: %s %s' % (client_id, path, title))
         if not self.TRACK_ID: return
         if not str(client_id) in self.trackers:
             self.add_tracker(client_id)
         self.trackers[str(client_id)].track_path(path, title)
 
     def tack_screen(self, client_id, screenName):
+        log.info('track_screen %s: %s' % (client_id, screenName))
+
         if not self.TRACK_ID: return
         if not str(client_id) in self.trackers:
             self.add_tracker(client_id)

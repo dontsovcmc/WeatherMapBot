@@ -42,6 +42,16 @@ show_map_reply_markup = ReplyKeyboardMarkup([
     [KeyboardButton(CHANGE_CONT), KeyboardButton(CHANGE_REGION), KeyboardButton(CHANGE_MAP)]],
     one_time_keyboard=True, resize_keyboard=True)
 
+'''
+1.  оставить один Shelve()
+2.  убрать set_user_data
+3.  в отчет - словами
+4.  БД типов карт
+5.  https://github.com/python-telegram-bot/python-telegram-bot/blob/master/examples/conversationbot.py
+6.  лог в файл
+7.  подписка на обновления
+8.
+'''
 
 
 def start(bot, update):
@@ -54,7 +64,7 @@ def start(bot, update):
             chat_user = sh.get(chat_id, 'user_id', None)
 
         if text == '/start' or not chat_user:
-            report.tack_screen(user_id, 'start')
+            report.tack_screen(user_id, '/start')
             set_user_data(chat_id, '', user_id)
 
             start_reply_markup = ReplyKeyboardMarkup(continent_keyboard_layout(KeyboardButton),
@@ -120,6 +130,7 @@ def start(bot, update):
                         update.message.text = name + timestamp.strftime(' (%d.%m.%Y %H:%M)')
                         start(bot, update)
                     except NoResultFound:
+                        report.tack_screen(user_id, u'<изображение отсутствует>')
                         bot.sendMessage(chat_id, text=u'\n<изображение отсутствует>', reply_markup=show_map_reply_markup)
 
             elif update.message.text == NEXT_MAP:
@@ -136,6 +147,7 @@ def start(bot, update):
                         update.message.text = name + timestamp.strftime(' (%d.%m.%Y %H:%M)')
                         start(bot, update)
                     except NoResultFound:
+                        report.tack_screen(user_id, u'no_image')
                         bot.sendMessage(chat_id, text=u'\n<изображение отсутствует>', reply_markup=show_map_reply_markup)
 
             else:
@@ -182,6 +194,7 @@ def start(bot, update):
 
                         sh.set(chat_id, 'maptype_id', map_type_id)
                         map_id = get_map_id(region_id, map_type_id)
+
                         path, info = get_map(map_id, timestamp)
                         log.info('path %s' % path)
 

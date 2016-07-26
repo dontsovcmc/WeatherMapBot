@@ -302,7 +302,7 @@ def get_map(map_id, timestamp):
     with DBSession() as session:
         sql_map = session.query(Map).get(map_id)
 
-        if not sql_map.last_update or (datetime.now() - sql_map.last_update).total_seconds() > sql_map.update_delay: # Данные устарели
+        if not sql_map.last_update or (datetime.now() - sql_map.last_update).total_seconds() > sql_map.update_delay / 2: # Данные устарели
             timestamp_url_list = current_map_urls(sql_map)
 
             sql_map.last_update = datetime.now()
@@ -318,7 +318,7 @@ def get_map(map_id, timestamp):
                         if not len(found):
                             path = file_storage.download(m[1], sql_map.id, m[0])
 
-                            new_file = Storage(url=m[0], path=path, timestamp=m[0],
+                            new_file = Storage(url=m[1], path=path, timestamp=m[0],
                                       download_time=datetime.now(),
                                       map_id=sql_map.id)
                             session.add(new_file)
@@ -330,7 +330,13 @@ def get_map(map_id, timestamp):
             return sql_file.path, get_map_info(session, sql_map, sql_file.timestamp)
 
         except NoResultFound:
-            return None, u'карта отсутствует'
+            # нет будущих карт. вернем предыдущую, если она моложе времени предыдущего обновления
+            try:
+                sql_file = found_next_map_in_storage(session, sql_map, timestamp-timedelta(seconds=sql_map.update_delay))
+                return sql_file.path, get_map_info(session, sql_map, sql_file.timestamp)
+
+            except NoResultFound:
+                return None, u'карта отсутствует'
 
 
 def current_map_urls(sql_map):
@@ -361,7 +367,7 @@ def current_map_urls(sql_map):
 
     elif sql_map.parse_type == PICTURE_MAP:
 
-        return [(datetime.now(), sql_map.url)]
+        return frames.append((datetime.now(), sql_map.url))
 
     return frames
 
