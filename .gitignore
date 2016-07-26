@@ -3,6 +3,7 @@ key
 shelve.db
 weather_map.db
 STORAGE/
+*.log
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
