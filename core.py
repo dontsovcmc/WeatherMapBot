@@ -371,7 +371,7 @@ def current_map_urls(sql_map):
 
     elif sql_map.parse_type == PICTURE_MAP:
 
-        return frames.append((datetime.now(), sql_map.url))
+        frames.append((datetime.now(), sql_map.url))
 
     return frames
 

@@ -13,3 +13,7 @@ def push(commit='unknown'):
 def update():
     local("git fetch")
     local("git rebase origin/master")
+
+def reset():
+    local("rm weather_map.db")
+    local("rm shelve.db")
