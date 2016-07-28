@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 __author__ = 'doncov.eugene'
 
-import tempfile
 import os
 
 from network import Downloader
@@ -17,11 +16,15 @@ class FileStorage(object):
         path = os.path.join(root, str(map_id), os.path.normpath(timestamp.strftime('%Y/%m/%d')))
         fname = timestamp.strftime('%Y-%m-%d_%H-%M')
 
+        log.info("download file: %s" % url)
+
         if not os.path.isdir(path):
             os.makedirs(path)
 
         with Downloader() as d:
             path = d.download_file(path, url, fname)
+
+        log.info("file downloaded to: %s" % path)
         return path
 
 file_storage = FileStorage()

@@ -11,6 +11,13 @@ Base = declarative_base()
 engine = create_engine('sqlite:///weather_map.db')
 Base.metadata.bind = engine
 
+
+class ParseType(Base):
+    """
+    """
+    __tablename__ = 'parse_type'
+    id = Column(Integer, primary_key=True)
+
 class MapType(Base):
     """
     """
@@ -65,7 +72,9 @@ class Map(Base):
     __tablename__ = 'map'
 
     id = Column(Integer, primary_key=True)
-    parse_type = Column(Integer, nullable=False)
+    parse_type_id = Column(Integer, ForeignKey('parse_type.id'))
+    parse_type = relationship(ParseType)
+
     bot_path = Column(String(50), nullable=False)
     info = Column(String(100))
     url = Column(String(300))

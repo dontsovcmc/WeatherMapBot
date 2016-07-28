@@ -7,7 +7,7 @@ from fabric.contrib.console import confirm
 def push(commit='unknown'):
     local("git add -u")
     local("git commit -m %s" % commit)
-    local("git push origin master") 
+    local("git push origin master")
 
 
 def update():

@@ -2,6 +2,7 @@
 __author__ = 'dontsov'
 
 import logging
+import os
 import sys
 from datetime import datetime
 
@@ -11,7 +12,11 @@ class Logger(object):
         log.setLevel(logging.INFO)
 
         filename = datetime.now().strftime('wmb_%d.%m.%Y_%H.%M.log')
-        fh = logging.FileHandler(filename, mode='w')
+
+        if not os.path.isdir('logs'):
+            os.makedirs('logs')
+
+        fh = logging.FileHandler(os.path.join('logs', filename), mode='w')
         fh.setLevel(logging.INFO)
 
         formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
