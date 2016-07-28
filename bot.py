@@ -177,12 +177,13 @@ def start(bot, update):
 
                     else: # not map_type_id
 
-                        if not map_type_id:
-                            map_type_id = get_map_type_id(text)
+                        if len(update.message.text.split(' (')) != 2:
+                            map_type_id = get_map_type_id(update.message.text)
+                            timestamp = datetime.now()
                         else:
-                            map_type_id = sh.get(chat_id, MAPTYPE)
-
-                        timestamp = datetime.now()
+                            map_type_name, timestr = update.message.text.split(' (')
+                            map_type_id = get_map_type_id(map_type_name)
+                            timestamp = datetime.strptime(timestr, '%d.%m.%Y %H:%M)') - timedelta(seconds=1)
 
                         report.track_screen(user_id, '/%s/%s/%s' % (continent_id, region_id, map_type_id))
 
