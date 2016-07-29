@@ -53,10 +53,13 @@ class Shelve(object):
         self.close()
 
     def open(self):
-        self.storage = shelve.open(shelve_name)
+        if not self.storage:
+            self.storage = shelve.open(shelve_name)
 
     def close(self):
-        self.storage.close()
+        if self.storage:
+            self.storage.close()
+        self.storage = None
 
     def set(self, chat_id, field, value):
         self.storage[str(chat_id) + field] = value
@@ -67,3 +70,4 @@ class Shelve(object):
         except KeyError:
             return default
 
+shelve_db = Shelve()

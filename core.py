@@ -12,12 +12,6 @@ from datetime import datetime, timedelta
 from storage import file_storage
 from maps import eparsetype
 
-PREVIOUS_MAP = u'<<'
-NEXT_MAP = u'>>'
-CHANGE_CONT = u'Выбор континета'
-CHANGE_REGION = u'Выбор региона'
-CHANGE_MAP = u'Выбор типа карты'
-REFRESH = u'Обновить'
 
 def sites_keyboard_layout(kb):
     '''
@@ -34,6 +28,17 @@ def sites_keyboard_layout(kb):
 
     return [add_kb(sites[x:x+3]) for x in xrange(0, len(sites), 3)]
 
+def get_continent_name_id():
+    with DBSession() as session:
+        return [(obj.name_rus, obj.id) for obj in session.query(Continent).all()]
+
+def get_region_name_id():
+    with DBSession() as session:
+        return [(obj.name_rus, obj.id) for obj in session.query(Region).all()]
+
+def get_type_name_id():
+    with DBSession() as session:
+        return [(obj.name_rus, obj.id) for obj in session.query(MapType).all()]
 
 def get_site_id(bot_path):
     with DBSession() as session:
@@ -88,37 +93,6 @@ def continent_keyboard_layout(kb):
     def add_kb(maps):
         return [kb(m) for m in maps]
     return [add_kb(cont[x:x+3]) for x in xrange(0, len(cont), 3)]
-
-
-def region_keyboard_layout(continent_id, kb):
-    maps = []
-    with DBSession() as session:
-        regions = session.query(Region).filter(Region.continent_id == continent_id).all()
-        for r in regions:
-            maps.append(r.name_rus)
-
-    maps.append(CHANGE_CONT)
-
-    def add_kb(maps):
-        return [kb(m) for m in maps]
-    return [add_kb(maps[x:x+3]) for x in xrange(0, len(maps), 3)]
-
-
-def maps_keyboard_layout(region_id, kb):
-    maps = []
-    with DBSession() as session:
-        sql_region = session.query(Region).get(region_id)
-        for m in session.query(Map).filter(Map.region_id == region_id).all():
-            sql_map_type = session.query(MapType).get(m.map_type_id)
-            maps.append(sql_map_type.name_rus) # format_sql_map_name(sql_region, sql_map_type))
-
-
-    def add_kb(maps):
-        return [kb(m) for m in maps]
-
-    mkbd = [add_kb(maps[x:x+3]) for x in xrange(0, len(maps), 3)]
-    mkbd.append([kb(CHANGE_CONT), kb(CHANGE_REGION)])
-    return mkbd
 
 
 def found_next_map_in_storage(session, sql_map, timestamp):
