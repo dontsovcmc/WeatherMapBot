@@ -1,3 +1,9 @@
+future
+urllib3
+certifi
+paramiko
+ecdsa
+pycrypto
 beautifulsoup4
 SQLAlchemy
 python-telegram-bot
