@@ -2,12 +2,15 @@
 __author__ = 'doncov.eugene'
 
 import sys
+import argparse
+
 from report import report
 from init import init
-from bot import updater
 
 def main(hook=False):
 
+
+    from bot import updater
     init()
 
     if not hook:

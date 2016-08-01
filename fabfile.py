@@ -17,3 +17,9 @@ def update():
 def reset():
     local("rm weather_map.db")
     local("rm shelve.db")
+
+
+def pushdev(commit='unknown'):
+    local("git add -u")
+    local("git commit -m \"%s\"" % commit)
+    local("git push origin dev")

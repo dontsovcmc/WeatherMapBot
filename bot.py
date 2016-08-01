@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 __author__ = 'doncov.eugene'
 
+
 import sys
 from logger import log
 from datetime import datetime, timedelta
@@ -54,7 +55,7 @@ show_map_reply_markup = ReplyKeyboardMarkup([
 9.  UTC везде
 '''
 
-def start(bot, update):
+def start_handler(bot, update):
 
     reply_keyboard = [[KeyboardButton(u'Отправить местоположение', request_location=True),
                       KeyboardButton(u'Выбрать карту')]]
@@ -154,13 +155,15 @@ def type_handler(bot, update):
     return STATE_REGION
 
 
-def refresh_handle(bot, update):
+def refresh_handler(bot, update):
     chat_id = update.message.chat_id
     timestamp = datetime.now()
 
     with Shelve() as sh:
         map_id = sh.get(chat_id, MAPID)
         return send_map(bot, map_id, timestamp)
+
+    return STATE_MAP
 
 
 def send_map(bot, update, map_id, timestamp):
@@ -222,11 +225,13 @@ def previous_handler(bot, update):
 
         timestamp = get_previous_timestamp_by_path(p)
 
-        send_map(bot, update, map_id, timestamp)
+        return send_map(bot, update, map_id, timestamp)
 
     except NoResultFound:
         report.track_screen(user_id, u'<изображение отсутствует>')
         bot.sendMessage(chat_id, text=u'\n<изображение отсутствует>')
+
+    return STATE_MAP
 
 
 def next_handler(bot, update):
@@ -243,12 +248,13 @@ def next_handler(bot, update):
 
         timestamp = get_next_timestamp_by_path(p)
 
-        send_map(bot, update, map_id, timestamp)
+        return send_map(bot, update, map_id, timestamp)
 
     except NoResultFound:
         report.track_screen(user_id, u'<изображение отсутствует>')
         bot.sendMessage(chat_id, text=u'\n<изображение отсутствует>')
 
+    return STATE_MAP
 
 
 def legend_handler(bot, update):
@@ -265,23 +271,24 @@ def legend_handler(bot, update):
             if map_id and chat_user and chat_user == user_id:
                 info = get_legend(map_id)
                 bot.sendMessage(chat_id, text=info, reply_markup=show_map_reply_markup)
+                return STATE_MAP
+
             else:
-                update.message.text = '/start'
-                sh.set(chat_id, CONTINENT, None)
-                start(bot, update)
+                raise Exception("incorrect map")
 
     except Exception, err:
         log.error('legend_handler error: %s' % str(err))
         update.message.text = '/start'
         start(bot, update)
 
+    return STATE_MAP
 
 
 conv_handler = ConversationHandler(
-        entry_points=[CommandHandler('start', start)],
+        entry_points=[CommandHandler('start', start_handler)],
 
         states={
-            STATE_MENU: [CommandHandler('start', start)],
+            STATE_MENU: [CommandHandler('start', start_handler)],
 
             STATE_CONT: [MessageHandler([Filters.location], location),
                          MessageHandler([Filters.text], select_continent)],
@@ -290,7 +297,7 @@ conv_handler = ConversationHandler(
 
             STATE_TYPE: [MessageHandler([Filters.text], region_handler)],
 
-            STATE_MAP: [CommandHandler('start', start),
+            STATE_MAP: [CommandHandler('start', start_handler),
                         MessageHandler([Filters.text], type_handler),
                         RegexHandler('^(Обновить)$', refresh_handler),
                         RegexHandler('^(<<)$', previous_handler),
@@ -309,12 +316,10 @@ def error_handler(bot, update, error):
     report.track_screen(user_id, '/handle_error')
 
 
-
 updater.dispatcher.add_handler(conv_handler)
 
 updater.dispatcher.add_handler(CommandHandler('legend', legend_handler))
-updater.dispatcher.add_handler(CommandHandler('start', start))
-
+updater.dispatcher.add_handler(CommandHandler('start', start_handler))
 
 updater.dispatcher.add_error_handler(error_handler)
 

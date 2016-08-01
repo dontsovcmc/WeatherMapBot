@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 __author__ = 'dontsov'
 
+import sys
+
 from logger import log
 from telegram.ext import CommandHandler, InlineQueryHandler, CallbackQueryHandler
 from telegram.ext import MessageHandler, Filters
@@ -12,7 +14,6 @@ from core import get_map, get_continent_name, get_region_name, get_map_type_name
 from core import get_legend, get_previous_timestamp_by_path, get_next_timestamp_by_path
 
 import unittest
-
 
 
 #updater.dispatcher.add_handler(CallbackQueryHandler(cb_handler))
@@ -28,7 +29,7 @@ def test_handler(bot, update):
     chat_id = update.message.chat_id
     try:
         try:
-            reply_markup = ReplyKeyboardMarkup([[KeyboardButton(REFRESH),
+            reply_markup = ReplyKeyboardMarkup([[KeyboardButton(u'??'),
                                                  KeyboardButton(u'Погода рядом', request_location=True)]],
                                                             one_time_keyboard=True, resize_keyboard=True)
 
@@ -60,13 +61,13 @@ class TestBot():
 
     def __init__(self, user_id):
         self.user_id = user_id
-        self.sendMessageArgs = {}
+        self.args = {}
         self.chat_id = None
 
     def sendMessage(self, chat_id, **kwargs):
         self.chat_id = chat_id
         for args in kwargs:
-            self.sendMessageArgs[args] = kwargs[args]
+            self.args[args] = kwargs[args]
 
     def __enter__(self):
         return self
@@ -75,8 +76,23 @@ class TestBot():
         pass
 
 
-bot = TestBot('1')
+class TestMessage():
+    def __init__(self, *args, **kwargs):
+        self.chat_id = kwargs.get('chat_id')
 
+
+class TestUpdate():
+    def __init__(self,  *args, **kwargs):
+        self.message = TestMessage(kwargs.get('message'))
+
+
+from telegram.update import Update
+
+bot = TestBot('1')
+update = TestUpdate(message={'chat_id': '0'})
+
+from bot import STATE_MENU, STATE_CONT, STATE_REGION, STATE_TYPE, STATE_MAP
+from bot import start_handler
 
 class TestStart(unittest.TestCase):
 
@@ -92,6 +108,10 @@ class TestStart(unittest.TestCase):
         with self.assertRaises(TypeError):
             s.split(2)
 
+    def test_start(self):
+        self.assertEqual(start_handler(bot, update), STATE_CONT)
+
 
 if __name__ == '__main__':
+
     unittest.main()
