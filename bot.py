@@ -3,6 +3,7 @@ __author__ = 'doncov.eugene'
 
 
 import sys
+import os
 from logger import log
 from datetime import datetime, timedelta
 
@@ -15,16 +16,19 @@ from sqlalchemy.orm.exc import NoResultFound
 
 from service import exception_info
 
-from core import get_continent_name_id, get_region_name_id, get_type_name_id
-from core import get_map_id, get_map_type_id, get_region_id, get_continent_id
-from core import get_map, get_continent_name, get_region_name, get_map_type_name
+from core import get_continent_name_id, get_region_name_id
+from core import get_map_id, get_map_type_id, filter_region_name, filter_type_name
+from core import get_map, get_region_type_by_map_id
 from core import get_legend, get_previous_timestamp_by_path, get_next_timestamp_by_path
 
-from storage import shelve_db, Shelve
+from storage import Shelve
 
 from report import report
 
-updater = Updater(token=sys.argv[1])
+if 'BOT_TOKEN' in os.environ:
+    updater = Updater(token=os.environ['BOT_TOKEN'])
+else:
+    updater = Updater(token=sys.argv[1])
 
 USER = 'user_id'
 MAPTYPE = 'maptype_id'
@@ -41,10 +45,8 @@ REFRESH = u'Обновить'
 STATE_MENU, STATE_CONT, STATE_REGION, STATE_TYPE, STATE_MAP = range(5)
 
 
-show_map_reply_markup = ReplyKeyboardMarkup([
-    [KeyboardButton(PREVIOUS_MAP), KeyboardButton(REFRESH), KeyboardButton(NEXT_MAP)],
-    [KeyboardButton(BACK), KeyboardButton(MENU)]],
-    one_time_keyboard=True, resize_keyboard=True)
+show_map_reply_markup = [[KeyboardButton(PREVIOUS_MAP), KeyboardButton(REFRESH), KeyboardButton(NEXT_MAP)],
+                            [KeyboardButton(BACK), KeyboardButton(MENU)]]
 
 '''
 3.  в отчет - словами
@@ -57,13 +59,22 @@ show_map_reply_markup = ReplyKeyboardMarkup([
 
 def start_handler(bot, update):
 
+    user_id = update.message.from_user.id
+    chat_id = update.message.chat_id
+
     reply_keyboard = [[KeyboardButton(u'Отправить местоположение', request_location=True),
                       KeyboardButton(u'Выбрать карту')]]
 
+    with Shelve() as sh:
+        map_id = sh.get(chat_id, MAPID)
+        if map_id:
+            region, mtype = get_region_type_by_map_id(map_id)
+            reply_keyboard.append([KeyboardButton(u'%s %s' % (region, mtype))])
+
     bot.sendMessage(update.message.chat_id,
                     text=u'Добрый день! Я могу отображать карты погоды'
-                         u'с различных сайтов. Пришлите мне свое местоположение'
-                         u'или выберите карту вручную!',
+                         u' с различных сайтов. Пришлите мне свое местоположение'
+                         u' или выберите карту вручную!',
                     reply_markup=ReplyKeyboardMarkup(reply_keyboard, resize_keyboard=True, one_time_keyboard=True))
     return STATE_CONT
 
@@ -78,6 +89,7 @@ def location(bot, update):
 
 def select_continent(bot, update):
 
+    user_id = update.message.from_user.id
     chat_id = update.message.chat_id
     text = update.message.text
 
@@ -88,48 +100,60 @@ def select_continent(bot, update):
         bot.sendMessage(chat_id,
                     text=u'Выберите континент',
                     reply_markup=ReplyKeyboardMarkup(reply_keyboard), one_time_keyboard=True)
+        report.track_screen(user_id, 'select_continent')
         return STATE_REGION
+    else:
+        # Предыдущая карта
+        return refresh_handler(bot, update)
 
     return ConversationHandler.END
 
 
 def continent_handler(bot, update):
+    user_id = update.message.from_user.id
     chat_id = update.message.chat_id
     text = update.message.text
 
     found = [cont for cont in get_continent_name_id() if cont[0] == text]
 
     if found:
+        cont_id = found[0][1]
         with Shelve() as sh:
-            sh.set(chat_id, CONTINENT, get_continent_id(text))
+            sh.set(chat_id, CONTINENT, cont_id)
 
-        reply_keyboard = [[KeyboardButton(d[0])] for d in get_region_name_id()]
+        reply_keyboard = [[KeyboardButton(d)] for d in filter_region_name(cont_id)]
 
         bot.sendMessage(chat_id,
                     text=u'Выберите регион',
-                    reply_markup=ReplyKeyboardMarkup(reply_keyboard), one_time_keyboard=True)
-        return STATE_REGION
+                    reply_markup=ReplyKeyboardMarkup(reply_keyboard), resize_keyboard=True, one_time_keyboard=True)
 
-    return STATE_CONT
+        report.track_screen(user_id, 'continent/%s' % str(cont_id))
+        return STATE_TYPE
+
+    return ConversationHandler.END
 
 
 def region_handler(bot, update):
+    user_id = update.message.from_user.id
     chat_id = update.message.chat_id
     text = update.message.text
 
     found = [cont for cont in get_region_name_id() if cont[0] == text]
     if found:
+        region_id = found[0][1]
         with Shelve() as sh:
-            sh.set(chat_id, REGION, get_region_id(text))
+            sh.set(chat_id, REGION, region_id)
 
-        reply_keyboard = [[KeyboardButton(d[0])] for d in get_type_name_id()]
+        reply_keyboard = [[KeyboardButton(d)] for d in filter_type_name(region_id)]
 
         bot.sendMessage(chat_id,
                     text=u'Выберите тип',
-                    reply_markup=ReplyKeyboardMarkup(reply_keyboard), one_time_keyboard=True)
-        return STATE_TYPE
+                    reply_markup=ReplyKeyboardMarkup(reply_keyboard), resize_keyboard=True, one_time_keyboard=True)
 
-    return STATE_REGION
+        report.track_screen(user_id, 'region/%s' % str(region_id))
+        return STATE_MAP
+
+    return ConversationHandler.END
 
 
 def type_handler(bot, update):
@@ -147,7 +171,8 @@ def type_handler(bot, update):
             map_id = get_map_id(sh.get(chat_id, REGION), type_id)
             sh.set(chat_id, MAPID, map_id)
 
-        return send_map(bot, map_id, timestamp)
+        report.track_screen(user_id, 'type/%s' % str(type_id))
+        return send_map(bot, update, map_id, timestamp)
 
     except Exception, err:
         bot.sendMessage(chat_id, text=u"Что-то пошло не так. Начать сначала: /start")
@@ -156,12 +181,14 @@ def type_handler(bot, update):
 
 
 def refresh_handler(bot, update):
+    user_id = update.message.from_user.id
     chat_id = update.message.chat_id
     timestamp = datetime.now()
 
     with Shelve() as sh:
         map_id = sh.get(chat_id, MAPID)
-        return send_map(bot, map_id, timestamp)
+        report.track_screen(user_id, 'refresh')
+        return send_map(bot, update, map_id, timestamp)
 
     return STATE_MAP
 
@@ -174,7 +201,6 @@ def send_map(bot, update, map_id, timestamp):
     path, info = get_map(map_id, timestamp)
     log.info('path %s' % path)
 
-
     reply_keyboard = [[KeyboardButton(PREVIOUS_MAP), KeyboardButton(REFRESH), KeyboardButton(NEXT_MAP)],
                       [KeyboardButton(BACK), KeyboardButton(MENU)]]
 
@@ -186,19 +212,21 @@ def send_map(bot, update, map_id, timestamp):
                             text=u'<обновление отсутствует>',
                             reply_markup=ReplyKeyboardMarkup(reply_keyboard))
 
-            report.track_screen(user_id, '/%s/no_update' % (map_id))
+            report.track_screen(user_id, 'map/%s/no_update' % (map_id))
         else:
 
             if path:
                 with open(path.encode('utf-8'), 'rb') as image:
-                    bot.sendPhoto(chat_id, image, caption=info.encode('utf-8'), reply_markup=show_map_reply_markup)
+                    bot.sendPhoto(chat_id, image, caption=info.encode('utf-8'),
+                                  reply_markup=ReplyKeyboardMarkup(show_map_reply_markup, one_time_keyboard=True, resize_keyboard=True))
 
-                    report.track_screen(user_id, '/%s' % (map_id))
+                    report.track_screen(user_id, 'map/%s' % str(map_id))
                     sh.set(chat_id, 'last_map', path)
             else:
-                bot.sendMessage(chat_id, text=info + u'\n<изображение отсутствует>', reply_markup=show_map_reply_markup)
-                report.track_screen(user_id, '/%s/no_image' % (map_id))
-
+                bot.sendMessage(chat_id, text=info + u'\n<изображение отсутствует>',
+                                reply_markup=ReplyKeyboardMarkup(show_map_reply_markup, one_time_keyboard=True, resize_keyboard=True))
+                report.track_screen(user_id, 'map/%s/no_image' % str(map_id))
+    return STATE_MAP
 
 def timestamp_handler(bot, update):
     text = update.message.text
@@ -214,47 +242,27 @@ def cancel_handler(bot, update):
 def previous_handler(bot, update):
 
     chat_id = update.message.chat_id
-    user_id = update.message.from_user.id
+    report.track_screen(update.message.from_user.id, 'previous')
 
-    report.track_screen(user_id, PREVIOUS_MAP)
+    with Shelve() as sh:
+        p = sh.get(chat_id, 'last_map')
+        map_id = sh.get(chat_id, MAPID)
 
-    try:
-        with Shelve() as sh:
-            p = sh.get(chat_id, 'last_map')
-            map_id = sh.get(chat_id, MAPID)
-
-        timestamp = get_previous_timestamp_by_path(p)
-
-        return send_map(bot, update, map_id, timestamp)
-
-    except NoResultFound:
-        report.track_screen(user_id, u'<изображение отсутствует>')
-        bot.sendMessage(chat_id, text=u'\n<изображение отсутствует>')
-
-    return STATE_MAP
+    timestamp = get_previous_timestamp_by_path(p)
+    return send_map(bot, update, map_id, timestamp)
 
 
 def next_handler(bot, update):
 
     chat_id = update.message.chat_id
-    user_id = update.message.from_user.id
+    report.track_screen(update.message.from_user.id, 'next')
 
-    report.track_screen(user_id, PREVIOUS_MAP)
+    with Shelve() as sh:
+        p = sh.get(chat_id, 'last_map')
+        map_id = sh.get(chat_id, MAPID)
 
-    try:
-        with Shelve() as sh:
-            p = sh.get(chat_id, 'last_map')
-            map_id = sh.get(chat_id, MAPID)
-
-        timestamp = get_next_timestamp_by_path(p)
-
-        return send_map(bot, update, map_id, timestamp)
-
-    except NoResultFound:
-        report.track_screen(user_id, u'<изображение отсутствует>')
-        bot.sendMessage(chat_id, text=u'\n<изображение отсутствует>')
-
-    return STATE_MAP
+    timestamp = get_next_timestamp_by_path(p)
+    return send_map(bot, update, map_id, timestamp)
 
 
 def legend_handler(bot, update):
@@ -270,7 +278,8 @@ def legend_handler(bot, update):
 
             if map_id and chat_user and chat_user == user_id:
                 info = get_legend(map_id)
-                bot.sendMessage(chat_id, text=info, reply_markup=show_map_reply_markup)
+                bot.sendMessage(chat_id, text=info,
+                                reply_markup=ReplyKeyboardMarkup(show_map_reply_markup, one_time_keyboard=True, resize_keyboard=True))
                 return STATE_MAP
 
             else:
@@ -279,7 +288,7 @@ def legend_handler(bot, update):
     except Exception, err:
         log.error('legend_handler error: %s' % str(err))
         update.message.text = '/start'
-        start(bot, update)
+        start_handler(bot, update)
 
     return STATE_MAP
 
@@ -298,10 +307,10 @@ conv_handler = ConversationHandler(
             STATE_TYPE: [MessageHandler([Filters.text], region_handler)],
 
             STATE_MAP: [CommandHandler('start', start_handler),
-                        MessageHandler([Filters.text], type_handler),
                         RegexHandler('^(Обновить)$', refresh_handler),
                         RegexHandler('^(<<)$', previous_handler),
-                        RegexHandler('^(>>)$', next_handler)]
+                        RegexHandler('^(>>)$', next_handler),
+                        MessageHandler([Filters.text], type_handler)]
         },
 
         fallbacks=[CommandHandler('cancel', cancel_handler)]

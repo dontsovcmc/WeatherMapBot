@@ -2,7 +2,7 @@
 __author__ = 'doncov.eugene'
 
 import sys
-import argparse
+import os
 
 from report import report
 from init import init
@@ -33,8 +33,11 @@ def main(hook=False):
 
 if __name__ == "__main__":
 
-    if len(sys.argv) > 2:
-        report.TRACK_ID = sys.argv[2]
+    if 'TRACK_ID' in os.environ:
+        report.TRACK_ID = os.environ('TRACK_ID')
+    else:
+        if len(sys.argv) > 2:
+            report.TRACK_ID = sys.argv[2]
 
     hook = len(sys.argv) > 3
     main(hook)

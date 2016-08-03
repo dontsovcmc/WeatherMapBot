@@ -36,9 +36,23 @@ def get_region_name_id():
     with DBSession() as session:
         return [(obj.name_rus, obj.id) for obj in session.query(Region).all()]
 
+def filter_region_name(cont_id):
+    with DBSession() as session:
+        return [obj.name_rus for obj in session.query(Region).filter(Region.continent_id == cont_id)]
+
 def get_type_name_id():
     with DBSession() as session:
         return [(obj.name_rus, obj.id) for obj in session.query(MapType).all()]
+
+def filter_type_name(region_id):
+    """
+    Показываем типы карт, которые есть у выбранного региона
+    :param region_id:
+    :return:
+    """
+    with DBSession() as session:
+        mtypes = [obj.map_type_id for obj in session.query(Map).filter(Map.region_id == region_id)]
+        return [obj.name_rus for obj in session.query(MapType).filter(MapType.id.in_(mtypes)).all()]
 
 def get_site_id(bot_path):
     with DBSession() as session:
@@ -54,6 +68,13 @@ def get_region_name(id):
     with DBSession() as session:
         obj = session.query(Region).get(id)
         return obj.name_rus
+
+def get_region_type_by_map_id(id):
+    with DBSession() as session:
+        sql_map = session.query(Map).get(id)
+        region = session.query(Region).get(sql_map.region_id)
+        mtype = session.query(MapType).get(sql_map.map_type_id)
+        return region.name_rus, mtype.name_rus
 
 def get_map_type_name(id):
     with DBSession() as session:
