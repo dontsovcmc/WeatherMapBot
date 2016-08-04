@@ -2,7 +2,7 @@
 __author__ = 'doncov.eugene'
 
 import bs4
-
+from math import pow, sqrt
 from network import Downloader
 from db import DBSession, Map, Site, Storage, MapType, Continent, Region
 from logger import log
@@ -36,13 +36,13 @@ def get_region_name_id():
     with DBSession() as session:
         return [(obj.name_rus, obj.id) for obj in session.query(Region).all()]
 
+def get_map_type_id():
+    with DBSession() as session:
+        return [(obj.name_rus, obj.id) for obj in session.query(MapType).all()]
+
 def filter_region_name(cont_id):
     with DBSession() as session:
         return [obj.name_rus for obj in session.query(Region).filter(Region.continent_id == cont_id)]
-
-def get_type_name_id():
-    with DBSession() as session:
-        return [(obj.name_rus, obj.id) for obj in session.query(MapType).all()]
 
 def filter_type_name(region_id):
     """
@@ -54,20 +54,6 @@ def filter_type_name(region_id):
         mtypes = [obj.map_type_id for obj in session.query(Map).filter(Map.region_id == region_id)]
         return [obj.name_rus for obj in session.query(MapType).filter(MapType.id.in_(mtypes)).all()]
 
-def get_site_id(bot_path):
-    with DBSession() as session:
-        site = session.query(Site).filter(Site.bot_path == bot_path).one()
-        return site.id
-
-def get_continent_name(id):
-    with DBSession() as session:
-        obj = session.query(Continent).get(id)
-        return obj.name_rus
-
-def get_region_name(id):
-    with DBSession() as session:
-        obj = session.query(Region).get(id)
-        return obj.name_rus
 
 def get_region_type_by_map_id(id):
     with DBSession() as session:
@@ -75,24 +61,6 @@ def get_region_type_by_map_id(id):
         region = session.query(Region).get(sql_map.region_id)
         mtype = session.query(MapType).get(sql_map.map_type_id)
         return region.name_rus, mtype.name_rus
-
-def get_map_type_name(id):
-    with DBSession() as session:
-        obj = session.query(MapType).get(id)
-        return obj.name_rus
-
-
-def get_continent_id(name):
-    with DBSession() as session:
-        return session.query(Continent).filter(Continent.name_rus == name).one().id
-
-def get_region_id(name):
-    with DBSession() as session:
-        return session.query(Region).filter(Region.name_rus == name).one().id
-
-def get_map_type_id(name):
-    with DBSession() as session:
-        return session.query(MapType).filter(MapType.name_rus == name).one().id
 
 def get_map_id(region_id, map_type_id):
     with DBSession() as session:
@@ -168,6 +136,34 @@ def add_urls_to_storage(session, map_id, timestamp_url_list):
         except Exception, err:
             log.error(err)
 
+from math import radians, cos, sin, asin, sqrt
+
+def haversine(lon1, lat1, lon2, lat2):
+    """
+    Calculate the great circle distance between two points
+    on the earth (specified in decimal degrees)
+    """
+    # convert decimal degrees to radians
+    lon1, lat1, lon2, lat2 = map(radians, [lon1, lat1, lon2, lat2])
+    # haversine formula
+    dlon = lon2 - lon1
+    dlat = lat2 - lat1
+    a = sin(dlat/2)**2 + cos(lat1) * cos(lat2) * sin(dlon/2)**2
+    c = 2 * asin(sqrt(a))
+    km = 6367 * c
+    return km
+
+def get_map_by_location(latitude, longitude):
+
+    with DBSession() as session:
+        coordinates = [(o.latitude, o.longitude, o.radius, haversine(longitude, latitude, o[1], o[0]), o.id) for o in session.query(Map).all()]
+        coordinates = [c for c in coordinates if c[2] > c[3]]
+        coordinates = sorted(coordinates, key=lambda c: c[3])
+
+        log.info("client coordinates: %f,%f" % (latitude, longitude))
+        for c in coordinates[:3]:
+            log.info("maps coordinates: %f,%f %d, distanse = %d km" % (c[0], c[1], c[2], int(c[3])))
+        return coordinates[0][4]
 
 def get_map(map_id, timestamp):
 

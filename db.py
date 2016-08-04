@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 __author__ = 'dontsov'
 
-from sqlalchemy import Column, ForeignKey, Integer, String, DateTime
+from sqlalchemy import Column, ForeignKey, Float, Integer, String, DateTime
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship, sessionmaker
 from sqlalchemy import create_engine
@@ -78,8 +78,15 @@ class Map(Base):
     bot_path = Column(String(50), nullable=False)
     info = Column(String(100))
     url = Column(String(300))
+
     update_delay = Column(Integer)
+
+    latitude = Column(Float)
+    longitude = Column(Float)
+    radius = Column(Integer)
+
     last_update = Column(DateTime)
+
 
     map_type_id = Column(Integer, ForeignKey('map_type.id'))
     map_type = relationship(MapType)

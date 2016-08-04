@@ -146,6 +146,10 @@ def init():
                 new_map.url = m.url
                 new_map.update_delay = m.update_delay
 
+                new_map.latitude = m.latitude
+                new_map.longitude = m.longitude
+                new_map.radius = m.radius
+
                 new_map.parse_type_id = sql_parse_type.id
                 new_map.region_id = sql_region.id
                 new_map.map_type_id = sql_map_type.id

@@ -12,13 +12,11 @@ from telegram.ext import CommandHandler, RegexHandler
 from telegram.ext import MessageHandler, Filters, ConversationHandler
 from telegram import ReplyKeyboardMarkup, KeyboardButton
 
-from sqlalchemy.orm.exc import NoResultFound
-
 from service import exception_info
 
 from core import get_continent_name_id, get_region_name_id
 from core import get_map_id, get_map_type_id, filter_region_name, filter_type_name
-from core import get_map, get_region_type_by_map_id
+from core import get_map, get_map_by_location, get_region_type_by_map_id
 from core import get_legend, get_previous_timestamp_by_path, get_next_timestamp_by_path
 
 from storage import Shelve
@@ -42,7 +40,7 @@ BACK = u'Назад'
 MENU = u'Меню'
 REFRESH = u'Обновить'
 
-STATE_MENU, STATE_CONT, STATE_REGION, STATE_TYPE, STATE_MAP = range(5)
+STATE_MENU, STATE_CONT, STATE_REGION, STATE_TYPE, STATE_MAP, SHOW_MAP = range(6)
 
 
 show_map_reply_markup = [[KeyboardButton(PREVIOUS_MAP), KeyboardButton(REFRESH), KeyboardButton(NEXT_MAP)],
@@ -65,6 +63,7 @@ def start_handler(bot, update):
     reply_keyboard = [[KeyboardButton(u'Отправить местоположение', request_location=True),
                       KeyboardButton(u'Выбрать карту')]]
 
+    # Кнопка предыдущей карты
     with Shelve() as sh:
         map_id = sh.get(chat_id, MAPID)
         if map_id:
@@ -75,16 +74,24 @@ def start_handler(bot, update):
                     text=u'Добрый день! Я могу отображать карты погоды'
                          u' с различных сайтов. Пришлите мне свое местоположение'
                          u' или выберите карту вручную!',
-                    reply_markup=ReplyKeyboardMarkup(reply_keyboard, resize_keyboard=True, one_time_keyboard=True))
+                    reply_markup=ReplyKeyboardMarkup(reply_keyboard, resize_keyboard=True))
     return STATE_CONT
 
 
 def location(bot, update):
+    chat_id = update.message.chat_id
     user_id = update.message.from_user.id
-    loc = update.message.location
-    print "%s" % str(loc)
-    # определяем карту, заоплняем структуры
-    return STATE_MAP
+
+    latidude = update.message.location['latitude']
+    longitude = update.message.location['longitude']
+
+    map_id = get_map_by_location(latidude, longitude)
+    timestamp = datetime.now()
+
+    with Shelve() as sh:
+        sh.set(chat_id, MAPID, map_id)
+        report.track_screen(user_id, 'location/%s' % str(map_id))
+        return send_map(bot, update, map_id, timestamp)
 
 
 def select_continent(bot, update):
@@ -93,13 +100,14 @@ def select_continent(bot, update):
     chat_id = update.message.chat_id
     text = update.message.text
 
-    if text == '/manual' or text == u'Выбрать карту':
+    if text == BACK or text == '/manual' or text == u'Выбрать карту':
 
         reply_keyboard = [[KeyboardButton(d[0])] for d in get_continent_name_id()]
+        reply_keyboard.append([KeyboardButton(BACK), KeyboardButton(MENU)])
 
         bot.sendMessage(chat_id,
                     text=u'Выберите континент',
-                    reply_markup=ReplyKeyboardMarkup(reply_keyboard), one_time_keyboard=True)
+                    reply_markup=ReplyKeyboardMarkup(reply_keyboard, resize_keyboard=True))
         report.track_screen(user_id, 'select_continent')
         return STATE_REGION
     else:
@@ -114,23 +122,28 @@ def continent_handler(bot, update):
     chat_id = update.message.chat_id
     text = update.message.text
 
-    found = [cont for cont in get_continent_name_id() if cont[0] == text]
+    if text == BACK:
+        with Shelve() as sh:
+            cont_id = sh.get(chat_id, CONTINENT)
+    else:
+        found = [cont for cont in get_continent_name_id() if cont[0] == text]
+        if not found:
+            return ConversationHandler.END
 
-    if found:
         cont_id = found[0][1]
         with Shelve() as sh:
             sh.set(chat_id, CONTINENT, cont_id)
 
-        reply_keyboard = [[KeyboardButton(d)] for d in filter_region_name(cont_id)]
+    reply_keyboard = [[KeyboardButton(d)] for d in filter_region_name(cont_id)]
+    reply_keyboard.append([KeyboardButton(BACK), KeyboardButton(MENU)])
 
-        bot.sendMessage(chat_id,
-                    text=u'Выберите регион',
-                    reply_markup=ReplyKeyboardMarkup(reply_keyboard), resize_keyboard=True, one_time_keyboard=True)
+    bot.sendMessage(chat_id,
+                text=u'Выберите регион',
+                reply_markup=ReplyKeyboardMarkup(reply_keyboard, resize_keyboard=True))
 
-        report.track_screen(user_id, 'continent/%s' % str(cont_id))
-        return STATE_TYPE
+    report.track_screen(user_id, 'continent/%s' % str(cont_id))
+    return STATE_TYPE
 
-    return ConversationHandler.END
 
 
 def region_handler(bot, update):
@@ -138,22 +151,28 @@ def region_handler(bot, update):
     chat_id = update.message.chat_id
     text = update.message.text
 
-    found = [cont for cont in get_region_name_id() if cont[0] == text]
-    if found:
+    if text == BACK:
+        with Shelve() as sh:
+            region_id = sh.get(chat_id, REGION)
+            sh.set(chat_id, 'last_map', '')
+    else:
+        found = [cont for cont in get_region_name_id() if cont[0] == text]
+        if not found:
+            return ConversationHandler.END
         region_id = found[0][1]
         with Shelve() as sh:
             sh.set(chat_id, REGION, region_id)
+            sh.set(chat_id, 'last_map', '')
 
-        reply_keyboard = [[KeyboardButton(d)] for d in filter_type_name(region_id)]
+    reply_keyboard = [[KeyboardButton(d)] for d in filter_type_name(region_id)]
+    reply_keyboard.append([KeyboardButton(BACK), KeyboardButton(MENU)])
 
-        bot.sendMessage(chat_id,
-                    text=u'Выберите тип',
-                    reply_markup=ReplyKeyboardMarkup(reply_keyboard), resize_keyboard=True, one_time_keyboard=True)
+    bot.sendMessage(chat_id,
+                text=u'Выберите тип',
+                reply_markup=ReplyKeyboardMarkup(reply_keyboard, resize_keyboard=True))
 
-        report.track_screen(user_id, 'region/%s' % str(region_id))
-        return STATE_MAP
-
-    return ConversationHandler.END
+    report.track_screen(user_id, 'region/%s' % str(region_id))
+    return STATE_MAP
 
 
 def type_handler(bot, update):
@@ -162,7 +181,14 @@ def type_handler(bot, update):
     text = update.message.text
 
     try:
-        type_id = get_map_type_id(text)
+        found = [cont for cont in get_map_type_id() if cont[0] == text]
+        if not found:
+            return ConversationHandler.END
+
+        type_id = found[0][1]
+        with Shelve() as sh:
+            sh.set(chat_id, MAPTYPE, type_id)
+
         timestamp = datetime.now()
 
         with Shelve() as sh:
@@ -176,8 +202,7 @@ def type_handler(bot, update):
 
     except Exception, err:
         bot.sendMessage(chat_id, text=u"Что-то пошло не так. Начать сначала: /start")
-
-    return STATE_REGION
+    return STATE_MENU
 
 
 def refresh_handler(bot, update):
@@ -210,7 +235,7 @@ def send_map(bot, update, map_id, timestamp):
         if last_path == path:
             bot.sendMessage(chat_id,
                             text=u'<обновление отсутствует>',
-                            reply_markup=ReplyKeyboardMarkup(reply_keyboard))
+                            reply_markup=ReplyKeyboardMarkup(reply_keyboard, resize_keyboard=True))
 
             report.track_screen(user_id, 'map/%s/no_update' % (map_id))
         else:
@@ -218,25 +243,15 @@ def send_map(bot, update, map_id, timestamp):
             if path:
                 with open(path.encode('utf-8'), 'rb') as image:
                     bot.sendPhoto(chat_id, image, caption=info.encode('utf-8'),
-                                  reply_markup=ReplyKeyboardMarkup(show_map_reply_markup, one_time_keyboard=True, resize_keyboard=True))
+                                  reply_markup=ReplyKeyboardMarkup(show_map_reply_markup, resize_keyboard=True))
 
                     report.track_screen(user_id, 'map/%s' % str(map_id))
                     sh.set(chat_id, 'last_map', path)
             else:
                 bot.sendMessage(chat_id, text=info + u'\n<изображение отсутствует>',
-                                reply_markup=ReplyKeyboardMarkup(show_map_reply_markup, one_time_keyboard=True, resize_keyboard=True))
+                                reply_markup=ReplyKeyboardMarkup(show_map_reply_markup, resize_keyboard=True))
                 report.track_screen(user_id, 'map/%s/no_image' % str(map_id))
-    return STATE_MAP
-
-def timestamp_handler(bot, update):
-    text = update.message.text
-    timestamp = datetime.strptime(text, '%d.%m.%Y %H:%M)') - timedelta(seconds=1)
-    chat_id = update.message.chat_id
-    user_id = update.message.from_user.id
-
-
-def cancel_handler(bot, update):
-    return STATE_MENU
+    return SHOW_MAP
 
 
 def previous_handler(bot, update):
@@ -267,54 +282,17 @@ def next_handler(bot, update):
 
 def legend_handler(bot, update):
     chat_id = update.message.chat_id
-    user_id = update.message.from_user.id
 
-    try:
-        with Shelve() as sh:
-            chat_user = sh.get(chat_id, USER)
-            map_type_id = sh.get(chat_id, MAPTYPE)
-            region_id = sh.get(chat_id, REGION)
-            map_id = get_map_id(region_id, map_type_id)
+    with Shelve() as sh:
+        map_id = sh.get(chat_id, MAPID)
+        if map_id:
+            info = get_legend(map_id)
+            bot.sendMessage(chat_id, text=info,
+                            reply_markup=ReplyKeyboardMarkup(show_map_reply_markup, resize_keyboard=True))
+            report.track_screen(update.message.from_user.id, 'legend/%s' % str(map_id))
+            return SHOW_MAP
 
-            if map_id and chat_user and chat_user == user_id:
-                info = get_legend(map_id)
-                bot.sendMessage(chat_id, text=info,
-                                reply_markup=ReplyKeyboardMarkup(show_map_reply_markup, one_time_keyboard=True, resize_keyboard=True))
-                return STATE_MAP
-
-            else:
-                raise Exception("incorrect map")
-
-    except Exception, err:
-        log.error('legend_handler error: %s' % str(err))
-        update.message.text = '/start'
-        start_handler(bot, update)
-
-    return STATE_MAP
-
-
-conv_handler = ConversationHandler(
-        entry_points=[CommandHandler('start', start_handler)],
-
-        states={
-            STATE_MENU: [CommandHandler('start', start_handler)],
-
-            STATE_CONT: [MessageHandler([Filters.location], location),
-                         MessageHandler([Filters.text], select_continent)],
-
-            STATE_REGION: [MessageHandler([Filters.text], continent_handler)],
-
-            STATE_TYPE: [MessageHandler([Filters.text], region_handler)],
-
-            STATE_MAP: [CommandHandler('start', start_handler),
-                        RegexHandler('^(Обновить)$', refresh_handler),
-                        RegexHandler('^(<<)$', previous_handler),
-                        RegexHandler('^(>>)$', next_handler),
-                        MessageHandler([Filters.text], type_handler)]
-        },
-
-        fallbacks=[CommandHandler('cancel', cancel_handler)]
-    )
+    return ConversationHandler.END
 
 
 def error_handler(bot, update, error):
@@ -323,6 +301,38 @@ def error_handler(bot, update, error):
     log.error('type_handler error: %s' % str(error))
     log.error(exception_info())
     report.track_screen(user_id, '/handle_error')
+
+
+conv_handler = ConversationHandler(
+    entry_points=[CommandHandler('start', start_handler),
+                  RegexHandler('^(Меню)$', start_handler)],
+
+    states={
+        STATE_MENU: [CommandHandler('start', start_handler)],
+
+        STATE_CONT: [MessageHandler([Filters.location], location),
+                     MessageHandler([Filters.text], select_continent)],
+
+        STATE_REGION: [RegexHandler('^(Назад)$', start_handler),
+                    MessageHandler([Filters.text], continent_handler)],
+
+        STATE_TYPE: [RegexHandler('^(Назад)$', select_continent),
+                    MessageHandler([Filters.text], region_handler)],
+
+        STATE_MAP:  [RegexHandler('^(Назад)$', continent_handler),
+                    MessageHandler([Filters.text], type_handler)],
+
+        SHOW_MAP:   [CommandHandler('start', start_handler),
+                    RegexHandler('^(Обновить)$', refresh_handler),
+                    RegexHandler('^(Назад)$', region_handler),
+                    RegexHandler('^(Меню)$', start_handler),
+                    RegexHandler('^(<<)$', previous_handler),
+                    RegexHandler('^(>>)$', next_handler)]
+    },
+
+    fallbacks=[CommandHandler('exit', error_handler)]
+)
+
 
 
 updater.dispatcher.add_handler(conv_handler)

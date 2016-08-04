@@ -9,8 +9,8 @@ from telegram.ext import MessageHandler, Filters
 from telegram import ForceReply, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 
 from init import init
-from core import get_map_id, get_map_type_id, get_region_id, get_continent_id
-from core import get_map, get_continent_name, get_region_name, get_map_type_name
+from core import get_map_id, get_map_type_id
+from core import get_map
 from core import get_legend, get_previous_timestamp_by_path, get_next_timestamp_by_path
 
 import unittest
