@@ -93,7 +93,7 @@ def found_next_map_in_storage(session, sql_map, timestamp):
             .all()
 
     if not len(storage_file):
-        raise NoResultFound()
+        return None
 
     storage_file = sorted(storage_file, key=lambda sf: (sf.timestamp - datetime.now()).total_seconds())[0]
     return storage_file
@@ -108,7 +108,7 @@ def found_previous_map_in_storage(session, sql_map, timestamp):
             .all()
 
     if not len(storage_file):
-        raise NoResultFound()
+        return None
 
     storage_file = sorted(storage_file, key=lambda sf: (sf.timestamp - datetime.now()).total_seconds())[-1]
     return storage_file
@@ -153,19 +153,25 @@ def haversine(lon1, lat1, lon2, lat2):
     km = 6367 * c
     return km
 
-def get_map_by_location(latitude, longitude):
+def get_region_by_location(latitude, longitude):
 
     with DBSession() as session:
-        coordinates = [(o.latitude, o.longitude, o.radius, haversine(longitude, latitude, o[1], o[0]), o.id) for o in session.query(Map).all()]
-        coordinates = [c for c in coordinates if c[2] > c[3]]
+        coordinates = [(o.latitude, o.longitude, o.radius, haversine(longitude, latitude, o.longitude, o.latitude), o.region_id) for o in session.query(Map).all()]
+        coordinates = [c for c in coordinates if c[2] > c[3]]  # радиус карты > расстояние до клиента
+        if not coordinates:
+            return None
+
         coordinates = sorted(coordinates, key=lambda c: c[3])
 
         log.info("client coordinates: %f,%f" % (latitude, longitude))
         for c in coordinates[:3]:
             log.info("maps coordinates: %f,%f %d, distanse = %d km" % (c[0], c[1], c[2], int(c[3])))
-        return coordinates[0][4]
+        return coordinates[0][4]  # region_id
 
 def get_map(map_id, timestamp):
+
+    if not timestamp:
+        return None, u'карта отсутствует'
 
     with DBSession() as session:
         sql_map = session.query(Map).get(map_id)
@@ -183,12 +189,18 @@ def get_map(map_id, timestamp):
                 add_urls_to_storage(session, sql_map.id, timestamp_url_list)
         try:
             sql_file = found_next_map_in_storage(session, sql_map, timestamp)
+            if not sql_file:
+                raise NoResultFound()
+
             return sql_file.path, get_map_info(session, sql_map, sql_file.timestamp)
 
         except NoResultFound:
             # нет будущих карт. вернем предыдущую, если она моложе времени предыдущего обновления
             try:
                 sql_file = found_next_map_in_storage(session, sql_map, timestamp-timedelta(seconds=sql_map.update_delay))
+                if not sql_file:
+                    raise NoResultFound()
+
                 return sql_file.path, get_map_info(session, sql_map, sql_file.timestamp)
 
             except NoResultFound:
@@ -239,7 +251,7 @@ def get_previous_timestamp_by_path(path):
         storage_file = session.query(Storage).filter(Storage.path == path).one()
         sql_map = session.query(Map).get(storage_file.map_id)
         sql_file = found_previous_map_in_storage(session, sql_map, storage_file.timestamp-timedelta(seconds=1))
-        return sql_file.timestamp
+        return sql_file.timestamp if sql_file else None
 
 
 def get_next_timestamp_by_path(path):
@@ -247,4 +259,4 @@ def get_next_timestamp_by_path(path):
         storage_file = session.query(Storage).filter(Storage.path == path).one()
         sql_map = session.query(Map).get(storage_file.map_id)
         sql_file = found_next_map_in_storage(session, sql_map, storage_file.timestamp+timedelta(seconds=1))
-        return sql_file.timestamp
+        return sql_file.timestamp if sql_file else None

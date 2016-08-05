@@ -16,7 +16,7 @@ from service import exception_info
 
 from core import get_continent_name_id, get_region_name_id
 from core import get_map_id, get_map_type_id, filter_region_name, filter_type_name
-from core import get_map, get_map_by_location, get_region_type_by_map_id
+from core import get_map, get_region_by_location, get_region_type_by_map_id
 from core import get_legend, get_previous_timestamp_by_path, get_next_timestamp_by_path
 
 from storage import Shelve
@@ -78,6 +78,38 @@ def start_handler(bot, update):
     return STATE_CONT
 
 
+def command_location_handler(bot, update):
+
+    chat_id = update.message.chat_id
+    user_id = update.message.from_user.id
+    text = update.message.text
+
+
+    try:
+        text = text.lstrip('/location').strip()
+        latidude, longitude = text.split(' ')
+
+        region_id = get_region_by_location(float(latidude), float(longitude))
+        if not region_id:
+            bot.sendMessage(chat_id,
+                    text=u'Извините, у меня нет такой карты')
+            report.track_screen(user_id, 'location/not_found')
+            return ConversationHandler.END
+
+        report.track_screen(user_id, 'location/region/%s' % str(region_id))
+
+        update.message.text = get_region_name_id()[region_id-1][0]
+        return region_handler(bot, update)
+
+    except Exception, err:
+        reply_keyboard = [[KeyboardButton(BACK), KeyboardButton(MENU)]]
+        bot.sendMessage(chat_id,
+                    text=u'Введите координаты в виде /location <широта> <долгота>',
+                    reply_markup=ReplyKeyboardMarkup(reply_keyboard, resize_keyboard=True))
+        report.track_screen(user_id, 'location/error')
+        raise Exception("")
+
+
 def location(bot, update):
     chat_id = update.message.chat_id
     user_id = update.message.from_user.id
@@ -85,13 +117,11 @@ def location(bot, update):
     latidude = update.message.location['latitude']
     longitude = update.message.location['longitude']
 
-    map_id = get_map_by_location(latidude, longitude)
-    timestamp = datetime.now()
+    region_id = get_region_by_location(latidude, longitude)
+    report.track_screen(user_id, 'location/region/%s' % str(region_id))
 
-    with Shelve() as sh:
-        sh.set(chat_id, MAPID, map_id)
-        report.track_screen(user_id, 'location/%s' % str(map_id))
-        return send_map(bot, update, map_id, timestamp)
+    update.message.text = get_region_name_id()[region_id-1][0]
+    return region_handler(bot, update)
 
 
 def select_continent(bot, update):
@@ -232,7 +262,7 @@ def send_map(bot, update, map_id, timestamp):
     with Shelve() as sh:
         last_path = sh.get(chat_id, 'last_map')
 
-        if last_path == path:
+        if path and last_path == path:
             bot.sendMessage(chat_id,
                             text=u'<обновление отсутствует>',
                             reply_markup=ReplyKeyboardMarkup(reply_keyboard, resize_keyboard=True))
@@ -297,20 +327,24 @@ def legend_handler(bot, update):
 
 def error_handler(bot, update, error):
 
-    user_id = update.message.from_user.id
+    if update:
+        user_id = update.message.from_user.id
+        report.track_screen(user_id, '/handle_error')
+
     log.error('type_handler error: %s' % str(error))
     log.error(exception_info())
-    report.track_screen(user_id, '/handle_error')
 
 
 conv_handler = ConversationHandler(
     entry_points=[CommandHandler('start', start_handler),
-                  RegexHandler('^(Меню)$', start_handler)],
+                  RegexHandler('^(Меню)$', start_handler),
+                  CommandHandler('location', command_location_handler)],
 
     states={
         STATE_MENU: [CommandHandler('start', start_handler)],
 
-        STATE_CONT: [MessageHandler([Filters.location], location),
+        STATE_CONT: [CommandHandler('location', command_location_handler),
+                     MessageHandler([Filters.location], location),
                      MessageHandler([Filters.text], select_continent)],
 
         STATE_REGION: [RegexHandler('^(Назад)$', start_handler),
@@ -323,6 +357,7 @@ conv_handler = ConversationHandler(
                     MessageHandler([Filters.text], type_handler)],
 
         SHOW_MAP:   [CommandHandler('start', start_handler),
+                    CommandHandler('location', command_location_handler),
                     RegexHandler('^(Обновить)$', refresh_handler),
                     RegexHandler('^(Назад)$', region_handler),
                     RegexHandler('^(Меню)$', start_handler),
@@ -334,11 +369,17 @@ conv_handler = ConversationHandler(
 )
 
 
-
 updater.dispatcher.add_handler(conv_handler)
-
 updater.dispatcher.add_handler(CommandHandler('legend', legend_handler))
 updater.dispatcher.add_handler(CommandHandler('start', start_handler))
+updater.dispatcher.add_handler(CommandHandler('location', command_location_handler))
+
+updater.dispatcher.add_handler(RegexHandler('^(Обновить)$', refresh_handler))
+updater.dispatcher.add_handler(RegexHandler('^(Назад)$', region_handler))
+updater.dispatcher.add_handler(RegexHandler('^(Меню)$', start_handler))
+updater.dispatcher.add_handler(RegexHandler('^(<<)$', previous_handler))
+updater.dispatcher.add_handler(RegexHandler('^(>>)$', next_handler))
+updater.dispatcher.add_handler(MessageHandler([Filters.text], start_handler))
 
 updater.dispatcher.add_error_handler(error_handler)
 
