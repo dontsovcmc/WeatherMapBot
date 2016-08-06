@@ -11,7 +11,7 @@ class Logger(object):
         log = logging.getLogger('')
         log.setLevel(logging.INFO)
 
-        filename = datetime.now().strftime('wmb_%d.%m.%Y_%H.%M.log')
+        filename = datetime.utcnow().strftime('wmb_%d.%m.%Y_%H.%M_UTC.log')
 
         if not os.path.isdir('logs'):
             os.makedirs('logs')

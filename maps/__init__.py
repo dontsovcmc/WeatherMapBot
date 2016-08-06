@@ -3,13 +3,13 @@ __author__ = 'doncov.eugene'
 
 from maps.weather_map import WeatherMap
 
-
-class eparsetype():
+class eparsetype(object):
     GISMETEO_MAP = 1
     PICTURE_MAP = 2
     LINK_MAP = 3
 
-class elegends():
+
+class elegends(object):
     gismeteo_ru_clouds = 1
     gismeteo_ru_airtemperature = 2
     gismeteo_ru_temp_actions = 3
@@ -19,45 +19,49 @@ class elegends():
     meteoinfo_by_radar = 7
     gismeteo_ru_osadki = 8
 
-class emaptype():
-    clouds = 1
-    airtemperature = 2
-    temp_actions = 3
-    wind = 4
-    hurricane = 5
-    radar = 6
-    osadki = 7
 
-class econtinent():
-    africa = 1
+class emaptype(object):
+    radar = 1
+    temp_actions = 2
+    airtemperature = 3
+    clouds = 4
+    osadki = 5
+    wind = 6
+    hurricane = 7
+
+
+class econtinent(object):
+    eurasia_russia = 1
     eurasia_europe = 2
-    eurasia_russia = 3
-    eurasia_asia = 4
-    north_america = 5
-    south_america = 6
+    eurasia_asia = 3
+    north_america = 4
+    south_america = 5
+    africa = 6
     antarctic = 7
 
 
-class eregion():
-    antarctic = 1
-    baltic = 2
-    belarus = 3
-    black_sea = 4
-    europe = 5
-    far_east = 6
-    mediterranean = 7
-    moldova = 8
-    moscow_region = 9
-    north_america = 10
-    north_siberia = 11
-    russia_central = 12
-    siberia = 13
-    south_america = 14
-    south_east_asia = 15
-    south_siberia = 16
-    ukraine = 17
-    ural = 18
-    spb = 19
+class eregion(object):
+    europe = 1
+    mediterranean = 2
+    baltic = 3
+    ukraine = 4
+    belarus = 5
+    moldova = 6
+
+    moscow_region = 7
+    spb = 8
+    black_sea = 9
+    russia_central = 10
+    ural = 11
+    siberia = 12
+    north_siberia = 13
+    south_siberia = 14
+    far_east = 15
+
+    antarctic = 16
+    north_america = 17
+    south_america = 18
+    south_east_asia = 19
     africa = 20
 
 

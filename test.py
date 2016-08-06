@@ -37,7 +37,7 @@ def test_handler(bot, update):
                                                resize_keyboard=True)
 
             map_id = 2
-            path, info = get_map(map_id, datetime.now())
+            path, info = get_map(map_id, datetime.utcnow())
             log.info('path %s' % path)
 
             bot.sendMessage(chat_id, text=info, reply_markup=reply_markup)
