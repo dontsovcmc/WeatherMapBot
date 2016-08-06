@@ -1,16 +1,14 @@
 # -*- coding: utf-8 -*-
 __author__ = 'doncov.eugene'
 
-import bs4
-from math import pow, sqrt
-from network import Downloader
 from db import DBSession, Map, Site, Storage, MapType, Continent, Region
 from logger import log
 from sqlalchemy.orm.exc import NoResultFound
 from sqlalchemy import and_
 from datetime import datetime, timedelta
 from storage import file_storage
-from maps import eparsetype
+from parsers import current_map_urls
+from math import radians, cos, sin, asin, sqrt
 
 
 def sites_keyboard_layout(kb):
@@ -95,7 +93,7 @@ def found_next_map_in_storage(session, sql_map, timestamp):
     if not len(storage_file):
         return None
 
-    storage_file = sorted(storage_file, key=lambda sf: (sf.timestamp - datetime.now()).total_seconds())[0]
+    storage_file = sorted(storage_file, key=lambda sf: (sf.timestamp - datetime.utcnow()).total_seconds())[0]
     return storage_file
 
 
@@ -110,7 +108,7 @@ def found_previous_map_in_storage(session, sql_map, timestamp):
     if not len(storage_file):
         return None
 
-    storage_file = sorted(storage_file, key=lambda sf: (sf.timestamp - datetime.now()).total_seconds())[-1]
+    storage_file = sorted(storage_file, key=lambda sf: (sf.timestamp - datetime.utcnow()).total_seconds())[-1]
     return storage_file
 
 
@@ -129,14 +127,13 @@ def add_urls_to_storage(session, map_id, timestamp_url_list):
                 path = file_storage.download(m[1], map_id, m[0])
 
                 new_file = Storage(url=m[1], path=path, timestamp=m[0],
-                          download_time=datetime.now(),
+                          download_time=datetime.utcnow(),
                           map_id=map_id)
                 session.add(new_file)
                 session.commit()
         except Exception, err:
             log.error(err)
 
-from math import radians, cos, sin, asin, sqrt
 
 def haversine(lon1, lat1, lon2, lat2):
     """
@@ -176,10 +173,10 @@ def get_map(map_id, timestamp):
     with DBSession() as session:
         sql_map = session.query(Map).get(map_id)
 
-        if not sql_map.last_update or (datetime.now() - sql_map.last_update).total_seconds() > sql_map.update_delay / 2: # Данные устарели
+        if not sql_map.last_update or (datetime.utcnow() - sql_map.last_update).total_seconds() > sql_map.update_delay / 2: # Данные устарели
             timestamp_url_list = current_map_urls(sql_map)
 
-            sql_map.last_update = datetime.now()
+            sql_map.last_update = datetime.utcnow()
             session.commit()
 
             if not timestamp_url_list:
@@ -207,43 +204,11 @@ def get_map(map_id, timestamp):
                 return None, u'карта отсутствует'
 
 
-def current_map_urls(sql_map):
-    """
-    [(timestamp, url)]
-    :return:
-    """
-    frames = []
-    if sql_map.parse_type_id == eparsetype.GISMETEO_MAP:
-
-        with Downloader() as d:
-            data = d.getresponse(sql_map.url)
-            soup = bs4.BeautifulSoup(data, "html.parser")
-
-        tab_i = 0
-        try:
-            while True:
-                imgs = soup.select('.tab%s > img' % tab_i)
-                if not len(imgs):
-                    break
-                for i in imgs:
-                    date_object = datetime.strptime(i.attrs['alt'], '%d.%m.%Y %H:%M')
-                    frame = date_object, 'https:' + i.attrs['title']
-                    frames.append(frame)
-                tab_i += 1
-        except Exception, err:
-            pass
-
-    elif sql_map.parse_type_id == eparsetype.PICTURE_MAP:
-
-        frames.append((datetime.now(), sql_map.url))
-
-    return frames
-
 def get_map_info(session, sql_map, timestamp):
     sql_map_type = session.query(MapType).get(sql_map.map_type_id)
     sql_region = session.query(Region).get(sql_map.region_id)
     return u'%s:%s\n%s\nЛегенда: /legend' % (sql_region.name_rus, sql_map_type.name_rus,
-                                          timestamp.strftime('%d.%m.%Y %H:%M'))
+                                          timestamp.strftime('%d.%m.%Y %H:%M UTC'))
 
 
 def get_previous_timestamp_by_path(path):

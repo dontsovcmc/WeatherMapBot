@@ -40,7 +40,7 @@ BACK = u'Назад'
 MENU = u'Меню'
 REFRESH = u'Обновить'
 
-STATE_MENU, STATE_CONT, STATE_REGION, STATE_TYPE, STATE_MAP, SHOW_MAP = range(6)
+STATE_MENU, STATE_CONT, STATE_REGION, STATE_TYPE, STATE_MAP, SHOW_MAP, STATE_LOCATION = range(7)
 
 
 show_map_reply_markup = [[KeyboardButton(PREVIOUS_MAP), KeyboardButton(REFRESH), KeyboardButton(NEXT_MAP)],
@@ -54,6 +54,13 @@ show_map_reply_markup = [[KeyboardButton(PREVIOUS_MAP), KeyboardButton(REFRESH),
 8.  request_location
 9.  UTC везде
 '''
+
+def outside_handler(bot, update):
+    user_id = update.message.from_user.id
+    chat_id = update.message.chat_id
+    bot.sendMessage(update.message.chat_id,
+                    text=u'Нажмите /start чтобы начать работу')
+
 
 def start_handler(bot, update):
 
@@ -82,19 +89,32 @@ def command_location_handler(bot, update):
 
     chat_id = update.message.chat_id
     user_id = update.message.from_user.id
+    reply_keyboard = [[KeyboardButton(MENU)]]
+    bot.sendMessage(chat_id,
+                text=u'Чтобы узнать погоду по координатам введите: <широта>,<долгота>',
+                reply_markup=ReplyKeyboardMarkup(reply_keyboard, resize_keyboard=True))
+    report.track_screen(user_id, 'location')
+    return STATE_LOCATION
+
+
+def manual_location_handler(bot, update):
+
+    chat_id = update.message.chat_id
+    user_id = update.message.from_user.id
     text = update.message.text
 
-
     try:
-        text = text.lstrip('/location').strip()
-        latidude, longitude = text.split(' ')
+        if text == MENU:
+            return start_handler(bot, update)
+
+        latidude, longitude = text.split(',')
 
         region_id = get_region_by_location(float(latidude), float(longitude))
         if not region_id:
             bot.sendMessage(chat_id,
                     text=u'Извините, у меня нет такой карты')
             report.track_screen(user_id, 'location/not_found')
-            return ConversationHandler.END
+            return STATE_LOCATION
 
         report.track_screen(user_id, 'location/region/%s' % str(region_id))
 
@@ -102,12 +122,7 @@ def command_location_handler(bot, update):
         return region_handler(bot, update)
 
     except Exception, err:
-        reply_keyboard = [[KeyboardButton(BACK), KeyboardButton(MENU)]]
-        bot.sendMessage(chat_id,
-                    text=u'Введите координаты в виде /location <широта> <долгота>',
-                    reply_markup=ReplyKeyboardMarkup(reply_keyboard, resize_keyboard=True))
-        report.track_screen(user_id, 'location/error')
-        raise Exception("")
+        return command_location_handler(bot, update)
 
 
 def location(bot, update):
@@ -144,7 +159,7 @@ def select_continent(bot, update):
         # Предыдущая карта
         return refresh_handler(bot, update)
 
-    return ConversationHandler.END
+    return STATE_MENU
 
 
 def continent_handler(bot, update):
@@ -158,7 +173,7 @@ def continent_handler(bot, update):
     else:
         found = [cont for cont in get_continent_name_id() if cont[0] == text]
         if not found:
-            return ConversationHandler.END
+            return STATE_MENU
 
         cont_id = found[0][1]
         with Shelve() as sh:
@@ -188,7 +203,7 @@ def region_handler(bot, update):
     else:
         found = [cont for cont in get_region_name_id() if cont[0] == text]
         if not found:
-            return ConversationHandler.END
+            return STATE_MENU
         region_id = found[0][1]
         with Shelve() as sh:
             sh.set(chat_id, REGION, region_id)
@@ -213,13 +228,13 @@ def type_handler(bot, update):
     try:
         found = [cont for cont in get_map_type_id() if cont[0] == text]
         if not found:
-            return ConversationHandler.END
+            return STATE_MENU
 
         type_id = found[0][1]
         with Shelve() as sh:
             sh.set(chat_id, MAPTYPE, type_id)
 
-        timestamp = datetime.now()
+        timestamp = datetime.utcnow()
 
         with Shelve() as sh:
             sh.set(chat_id, MAPTYPE, type_id)
@@ -238,7 +253,7 @@ def type_handler(bot, update):
 def refresh_handler(bot, update):
     user_id = update.message.from_user.id
     chat_id = update.message.chat_id
-    timestamp = datetime.now()
+    timestamp = datetime.utcnow()
 
     with Shelve() as sh:
         map_id = sh.get(chat_id, MAPID)
@@ -322,7 +337,7 @@ def legend_handler(bot, update):
             report.track_screen(update.message.from_user.id, 'legend/%s' % str(map_id))
             return SHOW_MAP
 
-    return ConversationHandler.END
+    return STATE_MENU
 
 
 def error_handler(bot, update, error):
@@ -337,32 +352,36 @@ def error_handler(bot, update, error):
 
 conv_handler = ConversationHandler(
     entry_points=[CommandHandler('start', start_handler),
-                  RegexHandler('^(Меню)$', start_handler),
                   CommandHandler('location', command_location_handler)],
 
     states={
         STATE_MENU: [CommandHandler('start', start_handler)],
 
         STATE_CONT: [CommandHandler('location', command_location_handler),
+                     RegexHandler('^(Меню)$', start_handler),
                      MessageHandler([Filters.location], location),
                      MessageHandler([Filters.text], select_continent)],
 
         STATE_REGION: [RegexHandler('^(Назад)$', start_handler),
+                    RegexHandler('^(Меню)$', start_handler),
                     MessageHandler([Filters.text], continent_handler)],
 
         STATE_TYPE: [RegexHandler('^(Назад)$', select_continent),
+                    RegexHandler('^(Меню)$', start_handler),
                     MessageHandler([Filters.text], region_handler)],
 
         STATE_MAP:  [RegexHandler('^(Назад)$', continent_handler),
+                    RegexHandler('^(Меню)$', start_handler),
                     MessageHandler([Filters.text], type_handler)],
 
-        SHOW_MAP:   [CommandHandler('start', start_handler),
-                    CommandHandler('location', command_location_handler),
-                    RegexHandler('^(Обновить)$', refresh_handler),
+        SHOW_MAP:   [RegexHandler('^(Меню)$', start_handler),
                     RegexHandler('^(Назад)$', region_handler),
-                    RegexHandler('^(Меню)$', start_handler),
+                    RegexHandler('^(Обновить)$', refresh_handler),
                     RegexHandler('^(<<)$', previous_handler),
-                    RegexHandler('^(>>)$', next_handler)]
+                    RegexHandler('^(>>)$', next_handler),
+                    CommandHandler('legend', legend_handler)],
+
+        STATE_LOCATION: [MessageHandler([Filters.text], manual_location_handler)]
     },
 
     fallbacks=[CommandHandler('exit', error_handler)]
@@ -370,17 +389,7 @@ conv_handler = ConversationHandler(
 
 
 updater.dispatcher.add_handler(conv_handler)
-updater.dispatcher.add_handler(CommandHandler('legend', legend_handler))
-updater.dispatcher.add_handler(CommandHandler('start', start_handler))
-updater.dispatcher.add_handler(CommandHandler('location', command_location_handler))
-
-updater.dispatcher.add_handler(RegexHandler('^(Обновить)$', refresh_handler))
-updater.dispatcher.add_handler(RegexHandler('^(Назад)$', region_handler))
-updater.dispatcher.add_handler(RegexHandler('^(Меню)$', start_handler))
-updater.dispatcher.add_handler(RegexHandler('^(<<)$', previous_handler))
-updater.dispatcher.add_handler(RegexHandler('^(>>)$', next_handler))
-updater.dispatcher.add_handler(MessageHandler([Filters.text], start_handler))
-
+updater.dispatcher.add_handler(MessageHandler([Filters.text], outside_handler))
 updater.dispatcher.add_error_handler(error_handler)
 
 
