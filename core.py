@@ -216,8 +216,11 @@ def get_previous_timestamp_by_path(path):
         try:
             storage_file = session.query(Storage).filter(Storage.path == path).one()
         except MultipleResultsFound:
-            log.error("В хранилище несколько объектов с одинаковым путем=%s" % path)
-            storage_file = session.query(Storage).filter(Storage.path == path).all()[0]
+            log.error("multiple objects in Storage with path=%s" % path)
+            storage_file = session.query(Storage).filter(Storage.path == path).all()
+            for f in storage_file:
+                log.info(str(f))
+            storage_file = storage_file[0]
 
         sql_map = session.query(Map).get(storage_file.map_id)
         sql_file = found_previous_map_in_storage(session, sql_map, storage_file.timestamp-timedelta(seconds=1))
@@ -229,8 +232,11 @@ def get_next_timestamp_by_path(path):
         try:
             storage_file = session.query(Storage).filter(Storage.path == path).one()
         except MultipleResultsFound:
-            log.error("В хранилище несколько объектов с одинаковым путем=%s" % path)
-            storage_file = session.query(Storage).filter(Storage.path == path).all()[0]
+            log.error("multiple objects in Storage with path=%s" % path)
+            storage_file = session.query(Storage).filter(Storage.path == path).all()
+            for f in storage_file:
+                log.info(str(f))
+            storage_file = storage_file[0]
 
         sql_map = session.query(Map).get(storage_file.map_id)
         sql_file = found_next_map_in_storage(session, sql_map, storage_file.timestamp+timedelta(seconds=1))

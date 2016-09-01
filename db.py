@@ -121,6 +121,10 @@ class Storage(Base):
     map_id = Column(Integer, ForeignKey('map.id'))
     map = relationship(Map)
 
+    def __str__(self):
+        return "id=%d, url=%s, path=%s, time=%s, download_time=%s, map_id=%d" % \
+            (self.id, self.url, self.path, self.timestamp.strftime('%d.%m.%Y %H:%M UTC'), \
+                self.download_time.strftime('%d.%m.%Y %H:%M UTC'), self.map_id)
 
 class DBSession(object):
     def __init__(self):
