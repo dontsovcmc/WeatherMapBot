@@ -210,11 +210,15 @@ def get_map(map_id, timestamp):
                 return None, u'карта отсутствует'
 
 
+
+
 def get_map_info(session, sql_map, timestamp):
     sql_map_type = session.query(MapType).get(sql_map.map_type_id)
     sql_region = session.query(Region).get(sql_map.region_id)
-    return u'%s:%s\n%s\nЛегенда: /legend' % (sql_region.name_rus, sql_map_type.name_rus,
-                                          timestamp.strftime('%d.%m.%Y %H:%M UTC'))
+    user_time = timestamp + timedelta(hours=3)
+    return u'%s:%s\n%s, %s\nЛегенда: /legend' % (sql_region.name_rus, sql_map_type.name_rus,
+                                          timestamp.strftime('%d.%m.%Y %H:%M UTC'),
+                                          user_time.strftime('%H:%M (+3)'))
 
 
 def get_previous_timestamp_by_path(path):
