@@ -3,7 +3,7 @@ __author__ = 'doncov.eugene'
 
 from db import DBSession, Map, Site, Storage, MapType, Continent, Region
 from logger import log
-from sqlalchemy.orm.exc import NoResultFound
+from sqlalchemy.orm.exc import NoResultFound, MultipleResultsFound
 from sqlalchemy import and_
 from datetime import datetime, timedelta
 from storage import file_storage
@@ -213,7 +213,12 @@ def get_map_info(session, sql_map, timestamp):
 
 def get_previous_timestamp_by_path(path):
     with DBSession() as session:
-        storage_file = session.query(Storage).filter(Storage.path == path).one()
+        try:
+            storage_file = session.query(Storage).filter(Storage.path == path).one()
+        except MultipleResultsFound:
+            log.error("В хранилище несколько объектов с одинаковым путем=%s" % path)
+            storage_file = session.query(Storage).filter(Storage.path == path).all()[0]
+
         sql_map = session.query(Map).get(storage_file.map_id)
         sql_file = found_previous_map_in_storage(session, sql_map, storage_file.timestamp-timedelta(seconds=1))
         return sql_file.timestamp if sql_file else None
@@ -221,7 +226,12 @@ def get_previous_timestamp_by_path(path):
 
 def get_next_timestamp_by_path(path):
     with DBSession() as session:
-        storage_file = session.query(Storage).filter(Storage.path == path).one()
+        try:
+            storage_file = session.query(Storage).filter(Storage.path == path).one()
+        except MultipleResultsFound:
+            log.error("В хранилище несколько объектов с одинаковым путем=%s" % path)
+            storage_file = session.query(Storage).filter(Storage.path == path).all()[0]
+
         sql_map = session.query(Map).get(storage_file.map_id)
         sql_file = found_next_map_in_storage(session, sql_map, storage_file.timestamp+timedelta(seconds=1))
         return sql_file.timestamp if sql_file else None

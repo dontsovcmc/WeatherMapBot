@@ -308,7 +308,11 @@ def previous_handler(bot, update):
         p = sh.get(chat_id, 'last_map')
         map_id = sh.get(chat_id, MAPID)
 
-    timestamp = get_previous_timestamp_by_path(p)
+    try:
+        timestamp = get_previous_timestamp_by_path(p)
+    except Exception, err:
+        log.error(str(err))
+        timestamp = None
     return send_map(bot, update, map_id, timestamp)
 
 
@@ -321,7 +325,11 @@ def next_handler(bot, update):
         p = sh.get(chat_id, 'last_map')
         map_id = sh.get(chat_id, MAPID)
 
-    timestamp = get_next_timestamp_by_path(p)
+    try:
+        timestamp = get_next_timestamp_by_path(p)
+    except Exception, err:
+        log.error(str(err))
+        timestamp = None
     return send_map(bot, update, map_id, timestamp)
 
 
