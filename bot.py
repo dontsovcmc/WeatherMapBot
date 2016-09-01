@@ -301,15 +301,15 @@ def send_map(bot, update, map_id, timestamp):
 
 def previous_handler(bot, update):
 
-    chat_id = update.message.chat_id
-    report.track_screen(update.message.from_user.id, 'previous')
-
-    with Shelve() as sh:
-        p = sh.get(chat_id, 'last_map')
-        map_id = sh.get(chat_id, MAPID)
-
     try:
-        timestamp = get_previous_timestamp_by_path(p)
+        chat_id = update.message.chat_id
+        report.track_screen(update.message.from_user.id, 'previous')
+
+        with Shelve() as sh:
+            p = sh.get(chat_id, 'last_map')
+            map_id = sh.get(chat_id, MAPID)
+
+            timestamp = get_previous_timestamp_by_path(p)
     except Exception, err:
         log.error(str(err))
         timestamp = None
@@ -318,14 +318,14 @@ def previous_handler(bot, update):
 
 def next_handler(bot, update):
 
-    chat_id = update.message.chat_id
-    report.track_screen(update.message.from_user.id, 'next')
-
-    with Shelve() as sh:
-        p = sh.get(chat_id, 'last_map')
-        map_id = sh.get(chat_id, MAPID)
-
     try:
+        chat_id = update.message.chat_id
+        report.track_screen(update.message.from_user.id, 'next')
+
+        with Shelve() as sh:
+            p = sh.get(chat_id, 'last_map')
+            map_id = sh.get(chat_id, MAPID)
+
         timestamp = get_next_timestamp_by_path(p)
     except Exception, err:
         log.error(str(err))
