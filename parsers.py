@@ -1,11 +1,11 @@
-
+# -*- coding: utf-8 -*-
 __author__ = 'Dontsov Evgeny'
 
 import bs4
 from network import Downloader
 from maps import eparsetype
-from datetime import datetime
-
+from datetime import datetime, timedelta
+from logger import log
 
 def current_map_urls(sql_map):
     """
@@ -27,6 +27,9 @@ def current_map_urls(sql_map):
                 for i in imgs:
                     date_object = datetime.strptime(i.attrs['alt'], '%d.%m.%Y %H:%M')
                     OFFSET = datetime.utcnow() - datetime.now()
+                    if abs(OFFSET.seconds + OFFSET.days*24*60*60) < 60:  #  разница меньше минуты = UTC
+                        log.warning("Gismeteo.ru bug with time, add +2 hour to map")
+                        OFFSET + timedelta(hours=2)  # Компенсируем баг gismeteo.ru - в Европе показывает на 2 ч больше
                     date_object = date_object + OFFSET
                     frame = date_object, 'https:' + i.attrs['title']
                     frames.append(frame)
