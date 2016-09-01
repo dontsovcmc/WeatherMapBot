@@ -66,6 +66,7 @@ def start_handler(bot, update):
 
     user_id = update.message.from_user.id
     chat_id = update.message.chat_id
+    report.track_screen(user_id, 'start')
 
     reply_keyboard = [[KeyboardButton(u'Отправить местоположение', request_location=True),
                       KeyboardButton(u'Выбрать карту')]]

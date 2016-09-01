@@ -29,7 +29,7 @@ def current_map_urls(sql_map):
                     OFFSET = datetime.utcnow() - datetime.now()
                     if abs(OFFSET.total_seconds()) < 60:  #  разница меньше минуты = UTC
                         log.warning("Gismeteo.ru bug with time, add +2 hour to map")
-                        OFFSET + timedelta(hours=2)  # Компенсируем баг gismeteo.ru - в Европе показывает на 2 ч больше
+                        OFFSET + timedelta(hours=-2)  # Компенсируем баг gismeteo.ru - в Европе показывает на 2 ч больше
                     date_object = date_object + OFFSET
                     frame = date_object, 'https:' + i.attrs['title']
                     frames.append(frame)
