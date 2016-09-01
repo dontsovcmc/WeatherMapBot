@@ -4,7 +4,8 @@ __author__ = 'doncov.eugene'
 from db import DBSession, Map, Site, Storage, MapType, Continent, Region
 from logger import log
 from sqlalchemy.orm.exc import NoResultFound, MultipleResultsFound
-from sqlalchemy import and_
+from sqlalchemy.sql import func
+from sqlalchemy import and_, or_
 from datetime import datetime, timedelta
 from storage import file_storage
 from parsers import current_map_urls
@@ -122,7 +123,11 @@ def add_urls_to_storage(session, map_id, timestamp_url_list):
 
     for m in timestamp_url_list:  # (timestamp, url)
         try:
-            found = session.query(Storage).filter(and_(Storage.timestamp == m[0], Storage.map_id == map_id)).all()
+            min = m[0] - timedelta(seconds=10) # одна и таже карта могла добавиться с мммаленькой дельтой в миллисекунды
+            max = m[0] + timedelta(seconds=10)
+            found = session.query(Storage).filter(
+                    and_(Storage.map_id == map_id,
+                         and_(Storage.timestamp > min, Storage.timestamp < max))).all()
             if not len(found):
                 path = file_storage.download(m[1], map_id, m[0])
 
@@ -176,14 +181,15 @@ def get_map(map_id, timestamp):
         if not sql_map.last_update or (datetime.utcnow() - sql_map.last_update).total_seconds() > sql_map.update_delay / 2: # Данные устарели
             timestamp_url_list = current_map_urls(sql_map)
 
-            sql_map.last_update = datetime.utcnow()
-            session.commit()
-
             if not timestamp_url_list:
                 log.error('ни одной карты на странице!')
                 return None, u'нет карт на странице'
             else:
                 add_urls_to_storage(session, sql_map.id, timestamp_url_list)
+
+            sql_map.last_update = datetime.utcnow()  # только после добавления. вдруг exception
+            session.commit()
+
         try:
             sql_file = found_next_map_in_storage(session, sql_map, timestamp)
             if not sql_file:
