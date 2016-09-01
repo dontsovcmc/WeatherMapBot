@@ -6,15 +6,15 @@ import os
 
 from report import report
 from init import init
+from bot import updater
 
 def main(hook=False):
-
-
-    from bot import updater
     init()
 
     if not hook:
         updater.start_polling()
+        updater.idle()
+
     else:
         WEBHOOK_HOST = sys.argv[3]
         WEBHOOK_PORT = 443  # 443, 80, 88 или 8443
@@ -29,6 +29,8 @@ def main(hook=False):
             url_path=sys.argv[1],
             cert=WEBHOOK_SSL_CERT, key=WEBHOOK_SSL_PRIV,
             webhook_url='%s' % WEBHOOK_URL)
+
+        updater.idle()
 
 
 if __name__ == "__main__":
